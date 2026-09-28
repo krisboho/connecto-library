@@ -1,0 +1,39 @@
+# Throwaway Grimmory + headless KOReader for testing Shelf Sync.
+# Everything lives under ./work (git-ignored). Run ./run.sh, not this directly.
+name: shelfsync-harness
+services:
+  db:
+    image: mariadb:11.4
+    environment:
+      MARIADB_ROOT_PASSWORD: harness-root
+      MARIADB_DATABASE: grimmory
+      MARIADB_USER: grimmory
+      MARIADB_PASSWORD: harness-db
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 3s
+      retries: 40
+  grimmory:
+    image: ghcr.io/grimmory-tools/grimmory:v3.5.0
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      USER_ID: "1000"
+      GROUP_ID: "1000"
+      DATABASE_URL: jdbc:mariadb://db:3306/grimmory
+      DATABASE_USERNAME: grimmory
+      DATABASE_PASSWORD: harness-db
+    ports:
+      - "16060:6060"
+    volumes:
+      - ./work/books:/books
+  koreader:
+    build: ./koreader
+    profiles: ["test"]
+    environment:
+      GRIMMORY_URL: http://grimmory:6060
+    volumes:
+      - ../shelfsync.koplugin:/plugin-src/shelfsync.koplugin:ro
+      - ./koreader/shelfsynctest.koplugin:/plugin-src/shelfsynctest.koplugin:ro
+      - ./work/kohome:/kohome
