@@ -259,3 +259,25 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
   - RAM: Grimmory about 1.2 GB, test DB about 170 MB.
 - **Not yet verified:** a logged-in UI walkthrough and an OPDS/KOSync test with real credentials. Kris needs to log in at :6061.
 - **Cleanup when done:** `docker rm -f grimmory-test mariadb-grimmory-test; docker network rm book-stack-test`. Keep the backup.
+
+---
+
+# Status 2026-09-28 (end of session)
+- **Phase 0: DONE. Grimmory v3.5.0 is live on Unraid :6060.**
+  - It runs as container `Grimmory` with the template my-Grimmory.xml and is on autostart.
+  - Same MariaDB (MariaDB-booklore) and same mounts. Schema is at v148.
+  - All 453 books, users, shelves and KOReader progress carried over. Shelfmark logged in successfully with its saved settings.
+  - BookLore was renamed `BookLore-retired`, stopped, and removed from autostart. **It must never start again**, because the DB now belongs to Grimmory.
+  - Backups are in /mnt/user/appdata/book-stack/backup/: the pre-cutover SQL and a tarball of the appdata folder.
+  - Pending with Kris's OK: `mariadb-upgrade` on MariaDB-booklore to fix the stale system tables left from the 12→13 upgrade.
+- **Phase 1: the plugin is BUILT and passes the harness.** Code is in kindle-plugin/ (Shelf Sync, AGPL-3.0). Plan unit tests pass 12/12, and the Docker harness (throwaway Grimmory + headless KOReader) passes 14/14.
+  - The install zip is kindle-plugin/dist/shelfsync.koplugin.zip, and setup steps are in kindle-plugin/README.md.
+  - **Still needs on-device checks:**
+    - Is Wi-Fi reconnected within about 60 s of wake? The plugin polls `isConnected` every 5 s after resume, and also listens for NetworkConnected.
+    - Does Tailscale work on the KT6 with the koreader-tailscale plugin, over plain HTTP to 100.95.26.46:6060?
+- **Next steps:**
+  - Kris installs the plugin on his Kindle.
+  - Create Grimmory users with download permission, plus a "Kindle" shelf per person.
+  - Point the Kindle's KOSync at Grimmory. Use the Tailscale IP once Tailscale on the Kindle is confirmed.
+  - Then Phase 2 (iPad/Readest) and Phase 3 (the one site).
+- The local git repo in ~/claude/book-stack has one commit (bea18dd). No remote yet.
