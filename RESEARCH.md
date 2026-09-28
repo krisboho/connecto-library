@@ -269,7 +269,7 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
   - All 453 books, users, shelves and KOReader progress carried over. Shelfmark logged in successfully with its saved settings.
   - BookLore was renamed `BookLore-retired`, stopped, and removed from autostart. **It must never start again**, because the DB now belongs to Grimmory.
   - Backups are in /mnt/user/appdata/book-stack/backup/: the pre-cutover SQL and a tarball of the appdata folder.
-  - Pending with Kris's OK: `mariadb-upgrade` on MariaDB-booklore to fix the stale system tables left from the 12→13 upgrade.
+  - **DONE 2026-09-28:** repaired the stale system tables on MariaDB-booklore with a one-off container (MARIADB_AUTO_UPGRADE=1, same image, same data dir, user 99:100). The entrypoint saved a system-table backup (system_mysql_backup_12.1.2-MariaDB.sql.zst in the data dir), and full dumps with routines now work. A DB backup taken just before is in backup/grimmory-20260928-pre-mariadb-upgrade.sql.
 - **Phase 1: the plugin is BUILT and passes the harness.** Code is in kindle-plugin/ (Shelf Sync, AGPL-3.0). Plan unit tests pass 12/12, and the Docker harness (throwaway Grimmory + headless KOReader) passes 14/14.
   - The install zip is kindle-plugin/dist/shelfsync.koplugin.zip, and setup steps are in kindle-plugin/README.md.
   - **Still needs on-device checks:**
