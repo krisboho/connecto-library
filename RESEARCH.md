@@ -294,3 +294,10 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
 - Search, Downloads and Settings are placeholder pages (milestones 2–4).
 - CI: .github/workflows/site.yml builds ghcr.io/krisboho/connecto-library:latest on push to main (site/**).
 - Deploy plan (needs Kris's OK): container `connecto-library` on Unraid :8430, env GRIMMORY_URL=http://192.168.0.9:6060, GRIMMORY_PUBLIC_URL=https://booklore.krisboho.com, SESSION_SECRET (generated, kept in /mnt/user/appdata/connecto-library/.env), SECURE_COOKIES=true behind the tunnel. Then Kris adds a tunnel hostname (library.krisboho.com → 192.168.0.9:8430) with Cloudflare Access.
+
+## Status 2026-09-30 (evening): deployed + milestone 2 built
+- **Connecto Library is LIVE on Unraid** as container `connecto-library` on :8430 (template my-connecto-library.xml, autostart, env in /mnt/user/appdata/connecto-library/.env with a generated SESSION_SECRET, SQLite in /mnt/user/appdata/connecto-library/data). It reaches Grimmory (a fake login returns Grimmory's "Invalid credentials"). SECURE_COOKIES=false so LAN http logins work; the tunnel adds HTTPS anyway.
+- **Milestone 2 built and verified against a fake Shelfmark**: Search (Shelfmark metadata search) → "Find copies" (Shelfmark releases, EPUB first) → Download (Shelfmark queue) → Downloads page (own downloads; admin sees all) with progress, cancel, retry, "Open" in library, "Other copies". Site records who requested what in SQLite because Shelfmark runs everything under one API key.
+- **Live on the server it still needs Shelfmark's API key:** add SHELFMARK_API_KEY to the shelfmark container (Unraid template) and SHELFMARK_URL=http://192.168.0.9:8084 + SHELFMARK_API_KEY to the site's .env, then restart both. Awaiting Kris's OK.
+- Kris still owes: Cloudflare tunnel hostname for :8430, family accounts, Tailscale on the Kindle, iPads.
+- Next: milestone 3/4 (Settings: mirrors, health, alerts, people; Delete), then usenet-direct hardening if Shelfmark stalls.
