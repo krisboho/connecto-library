@@ -281,3 +281,9 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
   - Point the Kindle's KOSync at Grimmory. Use the Tailscale IP once Tailscale on the Kindle is confirmed.
   - Then Phase 2 (iPad/Readest) and Phase 3 (the one site).
 - The local git repo in ~/claude/book-stack has one commit (bea18dd). No remote yet.
+
+## Round 4 decisions (2026-09-30): the one site = "Connecto Library"
+- Logins reuse Grimmory accounts.
+- Anyone in the family can search and download; only Kris can delete.
+- Reachable over both Tailscale and the Cloudflare tunnel (BookLore already went through the tunnel).
+- Code goes to a private GitHub repo.
