@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Library">
+<meta name="theme-color" content="#FFFFFF">
+<title>{% block title %}Connecto Library{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap">
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+</head>
+<body>
+{% if user %}
+<header class="top">
+  <a class="brand" href="/library">
+    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    <span>Connecto Library</span>
+  </a>
+  <nav class="tabs" aria-label="Main">
+    <a href="/search" class="{% if active == 'search' %}on{% endif %}">Search</a>
+    <a href="/library" class="{% if active == 'library' %}on{% endif %}">Library</a>
+    <a href="/downloads" class="{% if active == 'downloads' %}on{% endif %}">Downloads</a>
+    {% if user.is_admin %}<a href="/settings" class="{% if active == 'settings' %}on{% endif %}">Settings</a>{% endif %}
+  </nav>
+  <div class="who">
+    <span class="avatar" aria-hidden="true">{{ (user.name or user.username)[:1]|upper }}</span>
+    <span class="who-name">{{ user.name or user.username }}{% if user.is_admin %} <span class="muted">· admin</span>{% endif %}</span>
+    <form method="post" action="/logout"><button class="link" type="submit">Log out</button></form>
+  </div>
+</header>
+{% endif %}
+
+<main class="page">
+  {% if flash %}<div class="flash {{ flash.k }}" role="status">{{ flash.t }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+
+{% if user %}
+<nav class="tabbar" aria-label="Main">
+  <a href="/search" class="{% if active == 'search' %}on{% endif %}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search</a>
+  <a href="/library" class="{% if active == 'library' %}on{% endif %}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>Library</a>
+  <a href="/downloads" class="{% if active == 'downloads' %}on{% endif %}"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>Downloads</a>
+</nav>
+{% endif %}
+</body>
+</html>

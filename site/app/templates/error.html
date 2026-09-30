@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Something went wrong · Connecto Library{% endblock %}
+{% block content %}
+<div class="head"><h1>Something went wrong</h1></div>
+<div class="flash warn" role="alert">{{ message }}</div>
+<p><a class="btn" href="/library">Back to the library</a></p>
+{% endblock %}

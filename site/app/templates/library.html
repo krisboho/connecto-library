@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set active = "library" %}
+{% block title %}Library · Connecto Library{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Library</h1>
+  {% if total is not none %}<span class="muted">{{ total }} book{{ "" if total == 1 else "s" }}</span>{% endif %}
+  <form class="filter" method="get" action="/library">
+    <input type="hidden" name="view" value="{{ view }}">
+    <label class="sr" for="q">Filter by title or author</label>
+    <input id="q" name="q" type="search" value="{{ q }}" placeholder="Filter by title or author">
+    <button class="btn" type="submit">Filter</button>
+  </form>
+  <div class="seg" role="group" aria-label="View">
+    <a href="/library?q={{ q|urlencode }}" class="{% if view == 'all' %}on{% endif %}">All</a>
+    <a href="/library?view=kindle&q={{ q|urlencode }}" class="{% if view == 'kindle' %}on{% endif %}">On my Kindle · {{ kindle_count }}</a>
+  </div>
+</div>
+
+{% if kindle_shelf_missing %}
+<div class="notice">
+  <div>
+    <strong>No "{{ kindle_shelf_name }}" shelf yet.</strong>
+    <span class="muted">Books you send to your Kindle go on that shelf, and the Kindle mirrors it.</span>
+  </div>
+  <form method="post" action="/kindle-shelf"><button class="btn primary" type="submit">Create my {{ kindle_shelf_name }} shelf</button></form>
+</div>
+{% endif %}
+
+{% if not books %}
+<p class="empty">{% if view == 'kindle' %}Nothing on your Kindle yet. Pick a book and tap <strong>Send to my Kindle</strong>.{% else %}No books match.{% endif %}</p>
+{% endif %}
+
+<div class="grid">
+{% for b in books %}
+  <article class="card book">
+    <a class="cover" href="{{ grimmory_public_url }}{{ b.reader_path }}" target="_blank" rel="noopener" aria-label="Read {{ b.title }} online">
+      <img src="/cover/{{ b.id }}?t={{ b.title|urlencode }}" alt="" loading="lazy">
+    </a>
+    <div class="meta">
+      <div class="t">{{ b.title }}</div>
+      <div class="a muted">{{ b.authors }}</div>
+    </div>
+    <div class="pills">
+      {% if b.on_kindle %}<span class="pill green">On my Kindle</span>{% endif %}
+      {% if b.progress %}<span class="pill">Reading · {{ b.progress }}%</span>{% elif b.read_status == 'Read' %}<span class="pill">Read</span>{% endif %}
+      {% if b.format %}<span class="pill">{{ b.format }}{% if b.size %} · {{ b.size }}{% endif %}</span>{% endif %}
+    </div>
+    <div class="actions">
+      <form method="post" action="/books/{{ b.id }}/kindle">
+        <input type="hidden" name="back" value="/library?view={{ view }}&q={{ q|urlencode }}">
+        {% if b.on_kindle %}
+        <input type="hidden" name="on" value="0">
+        <button class="btn wide" type="submit">Remove from my Kindle</button>
+        {% else %}
+        <input type="hidden" name="on" value="1">
+        <button class="btn primary wide" type="submit" {% if kindle_shelf_missing %}disabled{% endif %}>Send to my Kindle</button>
+        {% endif %}
+      </form>
+      <a class="btn ghost" href="{{ grimmory_public_url }}{{ b.reader_path }}" target="_blank" rel="noopener">Read</a>
+    </div>
+  </article>
+{% endfor %}
+</div>
+
+{% if next_cursor %}
+<div class="more"><a class="btn" href="/library?q={{ q|urlencode }}&cursor={{ next_cursor|urlencode }}">More books</a></div>
+{% endif %}
+{% endblock %}

@@ -1,3 +1,6 @@
 kindle-plugin/harness/work/
 .DS_Store
 kindle-plugin/dist/
+site/.venv/
+site/dev/site.log
+site/.env
