@@ -13,6 +13,9 @@ class Settings:
     kindle_shelf_name: str
     page_size: int
     secure_cookies: bool
+    shelfmark_url: str
+    shelfmark_api_key: str
+    data_dir: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -27,4 +30,7 @@ class Settings:
             kindle_shelf_name=os.environ.get("KINDLE_SHELF_NAME", "Kindle"),
             page_size=int(os.environ.get("PAGE_SIZE", "48")),
             secure_cookies=os.environ.get("SECURE_COOKIES", "false").lower() == "true",
+            shelfmark_url=os.environ.get("SHELFMARK_URL", "").rstrip("/"),
+            shelfmark_api_key=os.environ.get("SHELFMARK_API_KEY", ""),
+            data_dir=os.environ.get("DATA_DIR", "./data"),
         )

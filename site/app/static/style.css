@@ -95,3 +95,29 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
   .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 10px; font-weight: 600; letter-spacing: -0.01em; color: #8E8E93; }
   .tabbar a.on { color: var(--accent); }
 }
+
+/* search + downloads */
+.head.col { flex-direction: column; align-items: stretch; gap: 10px; }
+.searchbar { display: flex; gap: 10px; }
+.searchbar input { flex-grow: 1; height: 50px; padding: 0 16px; font: inherit; font-size: 17px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.searchbar .btn { height: 50px; padding: 0 22px; font-size: 15px; }
+.list { display: flex; flex-direction: column; gap: 10px; }
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 16px; }
+.row.bad { border-color: #F1C9C9; }
+.row .body { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.row .side { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.thumb { width: 60px; height: 88px; border-radius: 6px; overflow: hidden; background: #E9ECF0; flex-shrink: 0; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .cover-fallback { font-size: 10px; padding: 6px; }
+.row .t { font-weight: 700; font-size: 16px; }
+.pill.blue { background: var(--accent-soft); color: var(--accent); }
+.pill.amber { background: var(--amber-soft); color: var(--amber); }
+.pill.red { background: var(--red-soft); color: var(--red); }
+.section { margin: 8px 0 0; font-size: 13px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.06em; }
+.bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; max-width: 320px; }
+.bar div { height: 8px; background: var(--accent); }
+@media (max-width: 720px) {
+  .row { grid-template-columns: auto minmax(0, 1fr); }
+  .row .side { grid-column: 1 / -1; justify-content: flex-start; }
+  .row .side form, .row .side .btn { flex-grow: 1; }
+}

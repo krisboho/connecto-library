@@ -11,6 +11,7 @@ API=http://localhost:16060
 
 if [[ "${1:-}" == "down" ]]; then
   pkill -f "uvicorn app.main:app" 2>/dev/null || true
+  pkill -f "uvicorn dev.fake_shelfmark:app" 2>/dev/null || true
   (cd $H && ./run.sh down) >/dev/null 2>&1 || true
   echo "stopped"; exit 0
 fi
@@ -35,7 +36,10 @@ if ! curl -sf $API/api/v1/healthcheck >/dev/null; then
 fi
 
 pkill -f "uvicorn app.main:app" 2>/dev/null || true
+pkill -f "uvicorn dev.fake_shelfmark:app" 2>/dev/null || true
+nohup .venv/bin/uvicorn dev.fake_shelfmark:app --host 127.0.0.1 --port 18084 > dev/fake_shelfmark.log 2>&1 &
 export GRIMMORY_URL=$API GRIMMORY_PUBLIC_URL=$API SESSION_SECRET=dev-only-secret-not-for-production SECURE_COOKIES=false
+export SHELFMARK_URL=http://127.0.0.1:18084 SHELFMARK_API_KEY=fake-key DATA_DIR=./data
 nohup .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8430 --reload > dev/site.log 2>&1 &
 for i in $(seq 1 30); do curl -sf http://127.0.0.1:8430/healthz >/dev/null && break; sleep 1; done
 echo "== site: http://127.0.0.1:8430  (login tester / harness-pass-123)  log: site/dev/site.log"

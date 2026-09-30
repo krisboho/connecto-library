@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% set active = "search" %}
+{% block title %}Search · Connecto Library{% endblock %}
+{% block content %}
+<div class="head col">
+  <h1>Find a book</h1>
+  <form class="searchbar" method="get" action="/search">
+    <label class="sr" for="q">Title, author or ISBN</label>
+    <input id="q" name="q" type="search" value="{{ q }}" placeholder="Title, author or ISBN" autofocus>
+    <button class="btn primary" type="submit">Search</button>
+  </form>
+  <p class="muted small">Searches Anna's Archive and your usenet indexers. Pick a book, then pick the copy to download.</p>
+</div>
+
+{% if not enabled %}
+<div class="notice"><div><strong>Search isn't connected yet.</strong> <span class="muted">The site needs Shelfmark's address and API key in its settings.</span></div></div>
+{% elif error %}
+<div class="flash warn" role="alert">{{ error }}</div>
+{% elif q and not results %}
+<p class="empty">No books found for “{{ q }}”. Try fewer words, or just the author.</p>
+{% endif %}
+
+<div class="list">
+{% for r in results %}
+  <article class="card row">
+    <div class="thumb">{% if r.cover %}<img src="{{ r.cover }}" alt="" loading="lazy">{% else %}<div class="cover-fallback">{{ r.title }}</div>{% endif %}</div>
+    <div class="body">
+      <div class="t">{{ r.title }}</div>
+      <div class="muted">{{ r.author }}{% if r.year %} · {{ r.year }}{% endif %}{% if r.publisher %} · {{ r.publisher }}{% endif %}</div>
+      <div class="pills">
+        {% if r.owned %}<span class="pill green">Already in your library</span>{% endif %}
+        {% if r.series %}<span class="pill">{{ r.series }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="side">
+      {% if r.owned %}
+      <a class="btn" href="/library?q={{ r.title|urlencode }}">Open in library</a>
+      {% else %}
+      <a class="btn primary" href="/search/copies?provider={{ r.provider|urlencode }}&book_id={{ r.book_id|urlencode }}&title={{ r.title|urlencode }}&author={{ r.author|urlencode }}&q={{ q|urlencode }}">Find copies</a>
+      {% endif %}
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endblock %}

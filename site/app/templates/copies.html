@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set active = "search" %}
+{% block title %}Copies · Connecto Library{% endblock %}
+{% block content %}
+<p><a href="/search?q={{ q|urlencode }}">← Back to results</a></p>
+{% if book %}
+<div class="head">
+  <div class="thumb">{% if book.cover %}<img src="{{ book.cover }}" alt="">{% else %}<div class="cover-fallback">{{ book.title }}</div>{% endif %}</div>
+  <div>
+    <h1>{{ book.title }}</h1>
+    <div class="muted">{{ book.author }}{% if book.year %} · {{ book.year }}{% endif %}</div>
+  </div>
+</div>
+{% endif %}
+
+{% if error %}
+<div class="flash warn" role="alert">{{ error }}</div>
+{% elif not releases %}
+<p class="empty">No copies found right now. Try again later, or search with a different spelling.</p>
+{% endif %}
+{% for n in notes %}<div class="notice"><div class="muted small">{{ n }}</div></div>{% endfor %}
+
+<div class="list">
+{% for r in releases %}
+  <article class="card row">
+    <div class="body">
+      <div class="t">{{ r.title }}</div>
+      <div class="pills">
+        <span class="pill {% if r.source in ('prowlarr', 'newznab') %}amber{% else %}blue{% endif %}">{{ r.source_label }}{% if r.speed %} · {{ r.speed }}{% endif %}</span>
+        <span class="pill">{{ r.format }}{% if r.size %} · {{ r.size }}{% endif %}</span>
+        {% if r.language %}<span class="pill">{{ r.language|upper }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="side">
+      <form method="post" action="/downloads">
+        <input type="hidden" name="release" value="{{ r.json }}">
+        <input type="hidden" name="q" value="{{ q }}">
+        <button class="btn {% if loop.first %}primary{% endif %}" type="submit">Download</button>
+      </form>
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endblock %}

@@ -18,10 +18,14 @@ from itsdangerous import BadSignature, URLSafeSerializer
 
 from .config import Settings
 from .grimmory import AuthError, Grimmory, GrimmoryError, Tokens, User
+from .shelfmark import Shelfmark, ShelfmarkError
+from .store import Store
 
 BASE = Path(__file__).parent
 settings = Settings.from_env()
 grimmory = Grimmory(settings.grimmory_url)
+shelfmark = Shelfmark(settings.shelfmark_url, settings.shelfmark_api_key)
+store = Store(Path(settings.data_dir) / "connecto.db")
 signer = URLSafeSerializer(settings.session_secret, salt="connecto-session")
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
@@ -264,12 +268,62 @@ async def cover(request: Request, book_id: int):
 
 
 @app.get("/search", response_class=HTMLResponse)
-async def search_page(request: Request):
+async def search_page(request: Request, q: str = ""):
     session = _read_session(request)
     if not session:
         return _login_redirect(request)
-    return _render(request, "coming.html", session, section="search", heading="Search",
-                   blurb="One box that checks Anna's Archive and usenet together, with a Download button per result.")
+    q = q.strip()
+    results, error = [], None
+    if q:
+        try:
+            body = await shelfmark.search(q)
+            results = [_search_hit(b) for b in body.get("books") or []]
+        except ShelfmarkError as e:
+            error = str(e)
+    return _render(request, "search.html", session, q=q, results=results, error=error,
+                   enabled=shelfmark.enabled)
+
+
+@app.get("/search/copies", response_class=HTMLResponse)
+async def copies_page(request: Request, provider: str, book_id: str, title: str = "", author: str = "", q: str = ""):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    releases, book, error, notes = [], None, None, []
+    try:
+        body = await shelfmark.releases(provider, book_id, title=title, author=author)
+        book = _search_hit(body.get("book") or {"title": title, "authors": [author], "provider": provider, "provider_id": book_id})
+        releases = [_release_view(r) for r in body.get("releases") or []]
+        releases.sort(key=lambda r: r["rank"])
+        notes = [str(e) for e in body.get("errors") or []]
+    except ShelfmarkError as e:
+        error = str(e)
+    return _render(request, "copies.html", session, q=q, book=book, releases=releases, error=error, notes=notes)
+
+
+@app.post("/downloads")
+async def start_download(request: Request, release: str = Form(...), q: str = Form("")):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/downloads", status_code=303)
+    try:
+        payload = json.loads(release)
+        if not isinstance(payload, dict) or not payload.get("source") or not payload.get("source_id"):
+            raise ValueError("bad release")
+    except ValueError:
+        _flash(response, "That copy couldn't be queued (bad release data).", "warn")
+        return response
+    try:
+        await shelfmark.download(payload)
+    except ShelfmarkError as e:
+        _flash(response, str(e), "warn")
+        return response
+    store.add_download(str(payload["source_id"]), session.user.id, session.user.name or session.user.username,
+                       str(payload.get("title") or "Untitled"), _author_of(payload), str(payload.get("source") or ""),
+                       payload.get("format"), payload.get("size"))
+    _flash(response, f"Queued \"{payload.get('title') or 'the book'}\". It lands in the library when it finishes.")
+    return response
 
 
 @app.get("/downloads", response_class=HTMLResponse)
@@ -277,8 +331,75 @@ async def downloads_page(request: Request):
     session = _read_session(request)
     if not session:
         return _login_redirect(request)
-    return _render(request, "coming.html", session, section="downloads", heading="Downloads",
-                   blurb="Your downloads with progress, retry, and a link to the book once it's in the library.")
+    mine = store.list_downloads(None if session.user.is_admin else session.user.id)
+    live: dict[str, dict[str, Any]] = {}
+    error = None
+    if mine and shelfmark.enabled:
+        try:
+            status = await shelfmark.status()
+            for bucket, tasks in (status or {}).items():
+                if isinstance(tasks, dict):
+                    for task_id, task in tasks.items():
+                        if isinstance(task, dict):
+                            live[str(task_id)] = {**task, "bucket": bucket}
+        except ShelfmarkError as e:
+            error = str(e)
+    rows = [_download_row(d, live.get(d["task_id"])) for d in mine]
+    for row in rows:
+        if row["status"] != row["stored_status"]:
+            store.update_status(row["task_id"], row["status"], row["message"])
+    active = [r for r in rows if r["is_active"]]
+    done = [r for r in rows if not r["is_active"]]
+    return _render(request, "downloads.html", session, in_progress=active, finished=done, error=error,
+                   everyone=session.user.is_admin, enabled=shelfmark.enabled)
+
+
+@app.post("/downloads/{task_id}/cancel")
+async def cancel_download(request: Request, task_id: str):
+    return await _download_action(request, task_id, "cancel")
+
+
+@app.post("/downloads/{task_id}/retry")
+async def retry_download(request: Request, task_id: str):
+    return await _download_action(request, task_id, "retry")
+
+
+async def _download_action(request: Request, task_id: str, action: str):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/downloads", status_code=303)
+    row = store.get(task_id)
+    if not row or (row["user_id"] != session.user.id and not session.user.is_admin):
+        _flash(response, "That download isn't yours.", "warn")
+        return response
+    try:
+        if action == "cancel":
+            await shelfmark.cancel(task_id)
+            store.update_status(task_id, "cancelled", None)
+            _flash(response, "Cancelled.")
+        else:
+            await shelfmark.retry(task_id)
+            store.update_status(task_id, "queued", None)
+            _flash(response, "Retrying.")
+    except ShelfmarkError as e:
+        _flash(response, str(e), "warn")
+    return response
+
+
+@app.get("/scover")
+async def shelfmark_cover(request: Request, u: str):
+    """Proxy a Shelfmark-cached cover (its /api/covers/... needs the API key)."""
+    session = _read_session(request)
+    if not session:
+        return Response(status_code=401)
+    if not u.startswith("/api/covers/"):
+        return Response(status_code=404)
+    r = await shelfmark.cover(u)
+    if r.status_code != 200:
+        return Response(status_code=404)
+    return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"),
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -356,6 +477,77 @@ def _card(book: dict[str, Any], kindle_ids: set[int]) -> dict[str, Any]:
     }
 
 
+SOURCE_LABELS = {
+    "direct_download": "Anna's Archive", "libgen": "LibGen", "prowlarr": "Usenet", "newznab": "Usenet",
+    "irc": "IRC", "audiobookbay": "AudiobookBay",
+}
+ACTIVE_STATUSES = {"queued", "resolving", "locating", "downloading"}
+NICE_STATUS = {"queued": "Queued", "resolving": "Finding file", "locating": "Finding file", "downloading": "Downloading",
+               "complete": "In library", "error": "Failed", "cancelled": "Cancelled"}
+
+
+def _author_of(obj: dict[str, Any]) -> str:
+    authors = obj.get("authors")
+    if isinstance(authors, list):
+        return ", ".join(str(a) for a in authors if a)
+    return str(obj.get("author") or "")
+
+
+def _cover_src(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("/api/covers/"):
+        return "/scover?u=" + quote(url, safe="")
+    return url if url.startswith("http") else None
+
+
+def _search_hit(b: dict[str, Any]) -> dict[str, Any]:
+    library = b.get("library") if isinstance(b.get("library"), dict) else {}
+    owned = any(v == "owned" for v in library.values())
+    return {
+        "provider": b.get("provider") or "", "book_id": str(b.get("provider_id") or ""),
+        "title": b.get("title") or "Untitled", "author": _author_of(b), "year": b.get("publish_year"),
+        "publisher": b.get("publisher"), "cover": _cover_src(b.get("cover_url")), "owned": owned,
+        "series": (f"{b['series_name']} #{b['series_position']:g}" if b.get("series_name") and b.get("series_position") else b.get("series_name")),
+    }
+
+
+def _release_view(r: dict[str, Any]) -> dict[str, Any]:
+    source = str(r.get("source") or "")
+    fmt = str(r.get("format") or "").upper()
+    extra = r.get("extra") if isinstance(r.get("extra"), dict) else {}
+    speed = str(extra.get("tier") or extra.get("speed") or "")
+    label = SOURCE_LABELS.get(source, source.replace("_", " ").title())
+    if r.get("indexer"):
+        label = f"{label} · {r['indexer']}"
+    rank = 0 if fmt == "EPUB" else 1 if fmt in ("AZW3", "MOBI", "KEPUB") else 2 if fmt == "PDF" else 3
+    if source in ("prowlarr", "newznab"):
+        rank += 0.5
+    return {
+        "title": r.get("title") or "", "source": source, "source_label": label, "format": fmt or "?",
+        "size": r.get("size") or "", "language": r.get("language") or "", "speed": speed,
+        "protocol": r.get("protocol") or "", "info_url": r.get("info_url"), "json": json.dumps(r), "rank": rank,
+    }
+
+
+def _download_row(d: dict[str, Any], live: dict[str, Any] | None) -> dict[str, Any]:
+    status = str((live or {}).get("status") or d.get("last_status") or "queued").lower()
+    if live and live.get("bucket") in NICE_STATUS and status not in NICE_STATUS:
+        status = str(live["bucket"])
+    message = (live or {}).get("status_message") or d.get("last_message")
+    progress = (live or {}).get("progress")
+    return {
+        "task_id": d["task_id"], "title": d["title"], "author": d.get("author") or "", "by": d["username"],
+        "source_label": SOURCE_LABELS.get(d.get("source") or "", (d.get("source") or "").title()),
+        "format": (d.get("format") or "").upper(), "size": d.get("size") or "",
+        "status": status, "stored_status": d.get("last_status"), "nice": NICE_STATUS.get(status, status.title()),
+        "message": message, "progress": int(progress) if isinstance(progress, (int, float)) else None,
+        "is_active": status in ACTIVE_STATUSES, "failed": status == "error",
+        "retry": bool((live or {}).get("retry_available")) or status == "error",
+        "when": __import__("datetime").datetime.fromtimestamp(d["requested_at"]).strftime("%b %d, %H:%M"),
+    }
+
+
 def _placeholder_cover(title: str) -> str:
     """A simple SVG tile with the title, used when Grimmory has no cover image."""
     from html import escape
@@ -392,3 +584,4 @@ def _cursor_from(href: str) -> str | None:
 @app.on_event("shutdown")
 async def _shutdown() -> None:
     await grimmory.aclose()
+    await shelfmark.aclose()

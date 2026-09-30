@@ -4,3 +4,5 @@ kindle-plugin/dist/
 site/.venv/
 site/dev/site.log
 site/.env
+site/data/
+site/dev/*.log

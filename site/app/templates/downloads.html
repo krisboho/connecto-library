@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set active = "downloads" %}
+{% block title %}Downloads · Connecto Library{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Downloads</h1>
+  <span class="muted">{% if everyone %}everyone's, newest first{% else %}yours, newest first{% endif %}</span>
+  <form class="filter" method="get" action="/downloads"><button class="btn" type="submit">Refresh</button></form>
+</div>
+
+{% if not enabled %}
+<div class="notice"><div><strong>Downloads aren't connected yet.</strong> <span class="muted">The site needs Shelfmark's address and API key in its settings.</span></div></div>
+{% endif %}
+{% if error %}<div class="flash warn" role="alert">{{ error }}</div>{% endif %}
+
+{% if not in_progress and not finished %}
+<p class="empty">Nothing yet. <a href="/search">Search for a book</a> to start one.</p>
+{% endif %}
+
+{% if in_progress %}
+<h2 class="section">In progress</h2>
+<div class="list">
+{% for d in in_progress %}
+  <article class="card row">
+    <div class="body">
+      <div class="t">{{ d.title }}{% if d.author %} <span class="muted">· {{ d.author }}</span>{% endif %}</div>
+      <div class="muted small">{% if everyone %}Requested by {{ d.by }} · {% endif %}{{ d.source_label }}{% if d.format %} · {{ d.format }}{% endif %}{% if d.size %} · {{ d.size }}{% endif %} · {{ d.when }}</div>
+      {% if d.progress is not none %}
+      <div class="bar"><div style="width: {{ d.progress }}%"></div></div>
+      {% endif %}
+      {% if d.message %}<div class="muted small">{{ d.message }}</div>{% endif %}
+    </div>
+    <div class="side">
+      <span class="pill amber">{{ d.nice }}{% if d.progress is not none %} · {{ d.progress }}%{% endif %}</span>
+      <form method="post" action="/downloads/{{ d.task_id|urlencode }}/cancel"><button class="btn" type="submit">Cancel</button></form>
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endif %}
+
+{% if finished %}
+<h2 class="section">Recent</h2>
+<div class="list">
+{% for d in finished %}
+  <article class="card row {% if d.failed %}bad{% endif %}">
+    <div class="body">
+      <div class="t">{{ d.title }}{% if d.author %} <span class="muted">· {{ d.author }}</span>{% endif %}</div>
+      <div class="muted small">{% if everyone %}Requested by {{ d.by }} · {% endif %}{{ d.source_label }}{% if d.format %} · {{ d.format }}{% endif %} · {{ d.when }}</div>
+      {% if d.failed and d.message %}<div class="small" style="color: var(--red)">{{ d.message }}</div>{% endif %}
+    </div>
+    <div class="side">
+      <span class="pill {% if d.failed %}red{% elif d.status == 'complete' %}green{% endif %}">{{ d.nice }}</span>
+      {% if d.status == 'complete' %}<a class="btn" href="/library?q={{ d.title|urlencode }}">Open</a>{% endif %}
+      {% if d.retry %}<form method="post" action="/downloads/{{ d.task_id|urlencode }}/retry"><button class="btn" type="submit">Retry</button></form>{% endif %}
+      {% if d.failed %}<a class="btn primary" href="/search?q={{ d.title|urlencode }}">Other copies</a>{% endif %}
+    </div>
+  </article>
+{% endfor %}
+</div>
+{% endif %}
+{% endblock %}
