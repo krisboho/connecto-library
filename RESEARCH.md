@@ -287,3 +287,10 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
 - Anyone in the family can search and download; only Kris can delete.
 - Reachable over both Tailscale and the Cloudflare tunnel (BookLore already went through the tunnel).
 - Code goes to a private GitHub repo.
+
+## Status 2026-09-30: Connecto Library milestone 1 built
+- Code: site/ (FastAPI + Jinja2). Dev loop: `site/dev/up.sh` (throwaway Grimmory on :16060, site on :8430, login tester / harness-pass-123).
+- Works end to end against the throwaway Grimmory: login with a Grimmory account, library grid with filter and "On my Kindle" view, create the "Kindle" shelf, Send/Remove to my Kindle (verified via Grimmory's API), Read online (opens Grimmory's reader), covers proxied with an SVG placeholder, iOS-style tab bar on phones.
+- Search, Downloads and Settings are placeholder pages (milestones 2–4).
+- CI: .github/workflows/site.yml builds ghcr.io/krisboho/connecto-library:latest on push to main (site/**).
+- Deploy plan (needs Kris's OK): container `connecto-library` on Unraid :8430, env GRIMMORY_URL=http://192.168.0.9:6060, GRIMMORY_PUBLIC_URL=https://booklore.krisboho.com, SESSION_SECRET (generated, kept in /mnt/user/appdata/connecto-library/.env), SECURE_COOKIES=true behind the tunnel. Then Kris adds a tunnel hostname (library.krisboho.com → 192.168.0.9:8430) with Cloudflare Access.
