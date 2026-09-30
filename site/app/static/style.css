@@ -90,6 +90,7 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .cover { height: 200px; }
   .actions { flex-direction: column; }
+  .btn { white-space: normal; height: auto; min-height: 40px; padding: 8px 12px; }
   .tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: calc(var(--tab-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: rgba(249, 249, 249, 0.94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-top: 0.5px solid rgba(0, 0, 0, 0.3); }
   .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 10px; font-weight: 600; letter-spacing: -0.01em; color: #8E8E93; }
   .tabbar a.on { color: var(--accent); }
