@@ -109,12 +109,34 @@ def _login_redirect(request: Request) -> RedirectResponse:
     return RedirectResponse(f"/login?next={quote(next_url, safe='')}", status_code=303)
 
 
+def _grimmory_url_for(request: Request) -> str:
+    """Where this browser should open Grimmory: the same route it used to reach us.
+
+    On an IP address (home LAN or Tailscale) that's the same IP on Grimmory's port;
+    on a hostname (the tunnel) it's GRIMMORY_PUBLIC_URL. GRIMMORY_URL_MAP can
+    override per host, e.g. "library.example.com=https://books.example.com".
+    """
+    host = (request.headers.get("x-forwarded-host") or request.url.hostname or "").split(",")[0].strip().lower()
+    for pair in settings.grimmory_url_map.split(","):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            if k.strip().lower() == host:
+                return v.strip().rstrip("/")
+    import ipaddress
+    try:
+        ipaddress.ip_address(host)
+        port = settings.grimmory_url.rsplit(":", 1)[-1] if ":" in settings.grimmory_url.split("//")[-1] else "6060"
+        return f"http://{host}:{port}"
+    except ValueError:
+        return settings.grimmory_public_url
+
+
 def _render(request: Request, name: str, session: Session | None, **ctx: Any) -> HTMLResponse:
     flash = _pop_flash(request)
     response = templates.TemplateResponse(request, name, {
         "user": session.user if session else None,
         "flash": flash,
-        "grimmory_public_url": settings.grimmory_public_url,
+        "grimmory_public_url": _grimmory_url_for(request),
         **ctx,
     })
     if flash:

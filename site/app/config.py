@@ -19,6 +19,7 @@ class Settings:
     alert_webhook_url: str
     health_interval_min: int
     alert_after_min: int
+    grimmory_url_map: str
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -39,4 +40,5 @@ class Settings:
             alert_webhook_url=os.environ.get("ALERT_WEBHOOK_URL", ""),
             health_interval_min=int(os.environ.get("HEALTH_INTERVAL_MIN", "15")),
             alert_after_min=int(os.environ.get("ALERT_AFTER_MIN", "30")),
+            grimmory_url_map=os.environ.get("GRIMMORY_URL_MAP", ""),
         )
