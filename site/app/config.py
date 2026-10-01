@@ -16,6 +16,9 @@ class Settings:
     shelfmark_url: str
     shelfmark_api_key: str
     data_dir: str
+    alert_webhook_url: str
+    health_interval_min: int
+    alert_after_min: int
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -33,4 +36,7 @@ class Settings:
             shelfmark_url=os.environ.get("SHELFMARK_URL", "").rstrip("/"),
             shelfmark_api_key=os.environ.get("SHELFMARK_API_KEY", ""),
             data_dir=os.environ.get("DATA_DIR", "./data"),
+            alert_webhook_url=os.environ.get("ALERT_WEBHOOK_URL", ""),
+            health_interval_min=int(os.environ.get("HEALTH_INTERVAL_MIN", "15")),
+            alert_after_min=int(os.environ.get("ALERT_AFTER_MIN", "30")),
         )

@@ -119,6 +119,25 @@ class Grimmory:
         if r.status_code not in (200, 204):
             raise GrimmoryError(_message(r, "Could not update the shelf"))
 
+    # -- admin --------------------------------------------------------------
+
+    async def users(self, access: str) -> list[dict[str, Any]]:
+        return await self._get("/api/v1/users", access)
+
+    async def version(self, access: str) -> dict[str, Any]:
+        return await self._get("/api/v1/version", access)
+
+    async def delete_books(self, access: str, ids: list[int]) -> None:
+        r = await self._client.delete("/api/v1/books", headers=_auth(access),
+                                      params={"ids": ",".join(str(int(i)) for i in ids)})
+        if r.status_code == 401:
+            raise AuthError("unauthorized")
+        if r.status_code not in (200, 204):
+            raise GrimmoryError(_message(r, "Could not delete the book"))
+
+    async def book(self, access: str, book_id: int) -> dict[str, Any]:
+        return await self._get(f"/api/v1/books/{int(book_id)}", access)
+
     # -- helpers ------------------------------------------------------------
 
     async def _get(self, path: str, access: str, params: dict[str, Any] | None = None) -> Any:

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% set active = "library" %}
+{% block title %}Delete · Connecto Library{% endblock %}
+{% block content %}
+<div class="head"><h1>Delete from the library?</h1></div>
+<div class="card row" style="max-width: 640px">
+  <div class="thumb"><img src="/cover/{{ book.id }}?t={{ book.title|urlencode }}" alt=""></div>
+  <div class="body">
+    <div class="t">{{ book.title }}</div>
+    <div class="muted">{{ book.authors }}</div>
+    <div class="muted small">This removes the file from the server for everyone. Any Kindle that has it drops it at its next sync. There is no undo.</div>
+  </div>
+</div>
+<form method="post" action="/books/{{ book.id }}/delete" style="display: flex; gap: 10px; margin-top: 12px">
+  <input type="hidden" name="back" value="{{ back }}">
+  <button class="btn danger" type="submit">Delete for everyone</button>
+  <a class="btn" href="{{ back }}">Keep it</a>
+</form>
+{% endblock %}

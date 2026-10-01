@@ -121,3 +121,29 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
   .row .side { grid-column: 1 / -1; justify-content: flex-start; }
   .row .side form, .row .side .btn { flex-grow: 1; }
 }
+
+/* settings + delete */
+.block { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.block-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.block-head h2 { margin: 0; font-size: 18px; font-weight: 800; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.tile { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: 10px; }
+.tile-h { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.tile form { margin-top: 4px; }
+.dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex-shrink: 0; }
+.dot.ok { background: var(--green); } .dot.bad { background: var(--red); } .dot.warn { background: var(--amber); }
+.mirror { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.mirror.bad { border-color: #F1C9C9; background: #FFF8F8; }
+.mirror .url { font-weight: 600; word-break: break-all; }
+.mirror .status { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+.form textarea, .form select { font: inherit; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.table { display: flex; flex-direction: column; gap: 6px; }
+.tr { display: grid; grid-template-columns: minmax(0, 1.4fr) 1fr 1fr 1fr; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; }
+.tr.th { border: 0; padding-top: 0; padding-bottom: 0; font-size: 12px; font-weight: 700; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.btn.danger { border: 0; background: var(--red); color: #fff; }
+.danger-text { color: var(--red); }
+@media (max-width: 720px) {
+  .mirror { grid-template-columns: 24px minmax(0, 1fr); } .mirror .status { grid-column: 2; white-space: normal; }
+  .tr { grid-template-columns: 1fr 1fr; } .tr.th { display: none; }
+}
+.admin-link { font-size: 12px; font-weight: 700; color: var(--red); align-self: flex-start; }

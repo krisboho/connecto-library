@@ -54,6 +54,12 @@ class Shelfmark:
     async def retry(self, task_id: str) -> None:
         await self._json("POST", f"/api/download/{task_id}/retry")
 
+    async def get_settings_tab(self, tab: str) -> dict[str, Any]:
+        return await self._json("GET", f"/api/settings/{tab}")
+
+    async def put_settings_tab(self, tab: str, values: dict[str, Any]) -> dict[str, Any]:
+        return await self._json("PUT", f"/api/settings/{tab}", json=values)
+
     async def cover(self, path_and_query: str) -> httpx.Response:
         return await self._client.get(path_and_query, timeout=30.0)
 

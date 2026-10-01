@@ -26,6 +26,23 @@ CREATE TABLE IF NOT EXISTS downloads (
   updated_at   REAL
 );
 CREATE INDEX IF NOT EXISTS downloads_user ON downloads(user_id, requested_at DESC);
+CREATE TABLE IF NOT EXISTS mirror_health (
+  url        TEXT PRIMARY KEY,
+  ok         INTEGER NOT NULL,
+  ms         INTEGER,
+  error      TEXT,
+  checked_at REAL NOT NULL,
+  failing_since REAL
+);
+CREATE TABLE IF NOT EXISTS people (
+  user_id         INTEGER PRIMARY KEY,
+  username        TEXT NOT NULL,
+  name            TEXT,
+  kindle_shelf_id INTEGER,
+  kindle_count    INTEGER,
+  last_seen       REAL
+);
+CREATE TABLE IF NOT EXISTS kv (k TEXT PRIMARY KEY, v TEXT);
 """
 
 
@@ -58,4 +75,49 @@ class Store:
     def update_status(self, task_id: str, status: str, message: str | None) -> None:
         self._db.execute("UPDATE downloads SET last_status=?, last_message=?, updated_at=? WHERE task_id=?",
                          (status, message, time.time(), task_id))
+        self._db.commit()
+
+    # -- mirror health ------------------------------------------------------
+
+    def record_mirror(self, url: str, ok: bool, ms: int | None, error: str | None) -> None:
+        now = time.time()
+        prev = self._db.execute("SELECT failing_since FROM mirror_health WHERE url=?", (url,)).fetchone()
+        failing_since = None if ok else ((prev["failing_since"] if prev and prev["failing_since"] else now))
+        self._db.execute(
+            "INSERT OR REPLACE INTO mirror_health(url, ok, ms, error, checked_at, failing_since) VALUES(?,?,?,?,?,?)",
+            (url, 1 if ok else 0, ms, error, now, failing_since))
+        self._db.commit()
+
+    def mirror_health(self) -> dict[str, dict[str, Any]]:
+        return {r["url"]: dict(r) for r in self._db.execute("SELECT * FROM mirror_health")}
+
+    def forget_mirrors_except(self, urls: list[str]) -> None:
+        keep = set(urls)
+        for r in self._db.execute("SELECT url FROM mirror_health").fetchall():
+            if r["url"] not in keep:
+                self._db.execute("DELETE FROM mirror_health WHERE url=?", (r["url"],))
+        self._db.commit()
+
+    # -- people -------------------------------------------------------------
+
+    def touch_person(self, user_id: int, username: str, name: str | None, kindle_shelf_id: int | None, kindle_count: int | None) -> None:
+        self._db.execute(
+            "INSERT OR REPLACE INTO people(user_id, username, name, kindle_shelf_id, kindle_count, last_seen) VALUES(?,?,?,?,?,?)",
+            (user_id, username, name, kindle_shelf_id, kindle_count, time.time()))
+        self._db.commit()
+
+    def people(self) -> dict[int, dict[str, Any]]:
+        return {int(r["user_id"]): dict(r) for r in self._db.execute("SELECT * FROM people")}
+
+    # -- key/value ----------------------------------------------------------
+
+    def get_kv(self, k: str) -> str | None:
+        row = self._db.execute("SELECT v FROM kv WHERE k=?", (k,)).fetchone()
+        return row["v"] if row else None
+
+    def set_kv(self, k: str, v: str | None) -> None:
+        if v is None:
+            self._db.execute("DELETE FROM kv WHERE k=?", (k,))
+        else:
+            self._db.execute("INSERT OR REPLACE INTO kv(k, v) VALUES(?,?)", (k, v))
         self._db.commit()

@@ -59,6 +59,7 @@
       </form>
       <a class="btn ghost" href="{{ grimmory_public_url }}{{ b.reader_path }}" target="_blank" rel="noopener">Read</a>
     </div>
+    {% if user.can_delete %}<a class="admin-link" href="/books/{{ b.id }}/delete?back=/library%3Fview%3D{{ view }}%26q%3D{{ q|urlencode }}" aria-label="Delete {{ b.title }} from the library">Delete from library</a>{% endif %}
   </article>
 {% endfor %}
 </div>

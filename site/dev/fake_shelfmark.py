@@ -20,6 +20,7 @@ BOOKS = [
      "publish_year": 2017, "cover_url": None, "series_name": "Standalone", "library": {"ebook": None}},
 ]
 tasks: dict[str, dict] = {}
+mirrors = {"AA_BASE_URL": "https://annas-archive.pk", "AA_MIRROR_URLS": ["https://annas-archive.pk", "https://annas-archive.gl", "https://does-not-exist.invalid"]}
 
 
 def _auth(x_api_key: str | None) -> None:
@@ -104,3 +105,20 @@ def retry(tid: str, x_api_key: str | None = Header(default=None)):
         raise HTTPException(404, {"error": "not found"})
     tasks[tid].update({"added_time": time.time(), "fail": False, "cancelled": False})
     return {"status": "queued"}
+
+
+@app.get("/api/settings/{tab}")
+def settings_get(tab: str, x_api_key: str | None = Header(default=None)):
+    _auth(x_api_key)
+    if tab != "mirrors":
+        raise HTTPException(404, {"error": "Unknown settings tab"})
+    return {"name": "mirrors", "display_name": "Mirrors",
+            "fields": [{"key": k, "value": v, "type": "list" if isinstance(v, list) else "select"} for k, v in mirrors.items()]}
+
+
+@app.put("/api/settings/{tab}")
+async def settings_put(tab: str, request: Request, x_api_key: str | None = Header(default=None)):
+    _auth(x_api_key)
+    body = await request.json()
+    mirrors.update({k: v for k, v in body.items() if k in mirrors})
+    return {"success": True, "updated": list(body.keys())}

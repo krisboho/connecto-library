@@ -20,12 +20,14 @@ from .config import Settings
 from .grimmory import AuthError, Grimmory, GrimmoryError, Tokens, User
 from .shelfmark import Shelfmark, ShelfmarkError
 from .store import Store
+from .health import Health, normalize_urls
 
 BASE = Path(__file__).parent
 settings = Settings.from_env()
 grimmory = Grimmory(settings.grimmory_url)
 shelfmark = Shelfmark(settings.shelfmark_url, settings.shelfmark_api_key)
 store = Store(Path(settings.data_dir) / "connecto.db")
+health = Health(settings, store, shelfmark)
 signer = URLSafeSerializer(settings.session_secret, salt="connecto-session")
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
@@ -197,6 +199,7 @@ async def library(request: Request, q: str = "", view: str = "all", cursor: str 
         return _render(request, "error.html", session, message=str(e))
 
     books = [_card(b, kindle_ids) for b in raw_books]
+    store.touch_person(session.user.id, session.user.username, session.user.name, session.kindle_shelf_id, len(kindle_ids))
     return _render(request, "library.html", session, books=books, q=q, view=view, total=total,
                    kindle_count=len(kindle_ids), next_cursor=next_cursor,
                    kindle_shelf_missing=session.kindle_shelf_id is None,
@@ -409,8 +412,148 @@ async def settings_page(request: Request):
         return _login_redirect(request)
     if not session.user.is_admin:
         return RedirectResponse("/library", status_code=303)
-    return _render(request, "coming.html", session, section="settings", heading="Settings",
-                   blurb="Source health, the Anna's Archive mirror list, and the people-and-Kindles table.")
+
+    # Sources
+    grimmory_info: dict[str, Any] = {"ok": False}
+    try:
+        ver = await _call(session, grimmory.version)
+        page = await _call(session, grimmory.books_page, size=1)
+        users = await _call(session, grimmory.users)
+        grimmory_info = {"ok": True, "version": ver.get("current"), "latest": ver.get("latest"),
+                         "books": (page.get("page") or {}).get("totalElements"), "users": len(users)}
+    except (AuthError, GrimmoryError) as e:
+        grimmory_info = {"ok": False, "error": str(e)}
+        users = []
+
+    shelf_info: dict[str, Any] = {"ok": False, "configured": shelfmark.enabled}
+    mirrors: list[str] = []
+    primary = "auto"
+    mirror_error = None
+    queue_counts: dict[str, int] = {}
+    if shelfmark.enabled:
+        shelf_info["ok"] = await shelfmark.health()
+        try:
+            mirrors, primary = await health.read_mirrors()
+        except ShelfmarkError as e:
+            mirror_error = str(e)
+        try:
+            status = await shelfmark.status()
+            queue_counts = {k: len(v) for k, v in (status or {}).items() if isinstance(v, dict) and v}
+        except ShelfmarkError:
+            pass
+
+    mh = store.mirror_health()
+    mirror_rows = []
+    for u in mirrors:
+        h = mh.get(u)
+        mirror_rows.append({
+            "url": u, "primary": u == primary, "checked": bool(h),
+            "ok": bool(h and h["ok"]), "ms": h and h.get("ms"), "error": h and h.get("error"),
+            "failing_for": _mins_since(h["failing_since"]) if h and h.get("failing_since") else None,
+        })
+    all_down, since = health.all_down()
+    last_run = store.get_kv("last_health_run")
+
+    # People
+    people_rows = []
+    seen = store.people()
+    for u in users:
+        perms = u.get("permissions") or {}
+        admin = bool(perms.get("admin") or perms.get("isAdmin"))
+        p = seen.get(int(u["id"]), {})
+        people_rows.append({
+            "name": u.get("name") or u.get("username"), "username": u.get("username"), "admin": admin,
+            "download": admin or bool(perms.get("canDownload")), "delete": admin or bool(perms.get("canDeleteBook")),
+            "kindle": (f"{p.get('kindle_count')} book{'s' if p.get('kindle_count') != 1 else ''}" if p.get("kindle_shelf_id") else None),
+            "last_seen": _ago(p.get("last_seen")) if p.get("last_seen") else "never used the site",
+        })
+
+    return _render(request, "settings.html", session, grimmory=grimmory_info, shelf=shelf_info,
+                   mirrors=mirror_rows, primary=primary, mirror_error=mirror_error, all_down=all_down,
+                   down_for=_mins_since(since) if since else None, queue=queue_counts,
+                   last_run=_ago(float(last_run)) if last_run else None, people=people_rows,
+                   webhook=bool(settings.alert_webhook_url), interval=settings.health_interval_min,
+                   alert_after=settings.alert_after_min, last_alert=_last_alert())
+
+
+@app.post("/settings/mirrors")
+async def save_mirrors(request: Request, urls: str = Form(""), primary: str = Form("auto")):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/settings", status_code=303)
+    if not session.user.is_admin:
+        return response
+    mirrors = normalize_urls(urls)
+    primary = primary.strip().rstrip("/")
+    try:
+        await health.write_mirrors(mirrors, primary if primary in mirrors else "auto")
+        await health.run_once()
+        _flash(response, f"Saved {len(mirrors)} mirror(s) to Shelfmark and tested them.")
+    except ShelfmarkError as e:
+        _flash(response, str(e), "warn")
+    return response
+
+
+@app.post("/settings/check")
+async def check_now(request: Request):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/settings", status_code=303)
+    if session.user.is_admin:
+        try:
+            await health.run_once()
+            _flash(response, "Checked all mirrors and services.")
+        except ShelfmarkError as e:
+            _flash(response, str(e), "warn")
+    return response
+
+
+@app.post("/settings/test-alert")
+async def test_alert(request: Request):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/settings", status_code=303)
+    if session.user.is_admin:
+        ok = await health.notify("Connecto Library: test alert", "If you can read this, alerts work.", "default")
+        _flash(response, "Test alert sent." if ok else "No alert went out. Set ALERT_WEBHOOK_URL in the site's settings file.", "ok" if ok else "warn")
+    return response
+
+
+@app.get("/books/{book_id}/delete", response_class=HTMLResponse)
+async def delete_confirm(request: Request, book_id: int, back: str = "/library"):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    if not session.user.can_delete:
+        return RedirectResponse("/library", status_code=303)
+    try:
+        book = await _call(session, grimmory.book, book_id)
+    except (AuthError, GrimmoryError) as e:
+        return _render(request, "error.html", session, message=str(e))
+    return _render(request, "delete.html", session, book=_card(book, set()), back=back)
+
+
+@app.post("/books/{book_id}/delete")
+async def delete_book(request: Request, book_id: int, back: str = Form("/library")):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    target = back if back.startswith("/") and not back.startswith("//") else "/library"
+    response = RedirectResponse(target, status_code=303)
+    if not session.user.can_delete:
+        _flash(response, "Only an admin can delete books.", "warn")
+        return response
+    try:
+        await _call(session, grimmory.delete_books, [book_id])
+        _flash(response, "Deleted from the library. Every Kindle drops it at its next sync.")
+    except (AuthError, GrimmoryError) as e:
+        _flash(response, str(e), "warn")
+    if session.dirty:
+        _write_session(response, session)
+    return response
 
 
 @app.get("/healthz")
@@ -548,6 +691,33 @@ def _download_row(d: dict[str, Any], live: dict[str, Any] | None) -> dict[str, A
     }
 
 
+def _mins_since(ts: float | None) -> int | None:
+    import time as _t
+    return int((_t.time() - ts) / 60) if ts else None
+
+
+def _ago(ts: float | None) -> str:
+    if not ts:
+        return "never"
+    import time as _t
+    m = int((_t.time() - ts) / 60)
+    if m < 1:
+        return "just now"
+    if m < 60:
+        return f"{m} min ago"
+    if m < 60 * 48:
+        return f"{m // 60} h ago"
+    return f"{m // (60 * 24)} days ago"
+
+
+def _last_alert() -> str | None:
+    raw = store.get_kv("last_alert")
+    if not raw or "|" not in raw:
+        return None
+    ts, title = raw.split("|", 1)
+    return f"{title} ({_ago(float(ts))})"
+
+
 def _placeholder_cover(title: str) -> str:
     """A simple SVG tile with the title, used when Grimmory has no cover image."""
     from html import escape
@@ -581,7 +751,14 @@ def _cursor_from(href: str) -> str | None:
     return (parse_qs(urlparse(href).query).get("cursor") or [None])[0]
 
 
+@app.on_event("startup")
+async def _startup() -> None:
+    if shelfmark.enabled:
+        health.start()
+
+
 @app.on_event("shutdown")
 async def _shutdown() -> None:
+    await health.stop()
     await grimmory.aclose()
     await shelfmark.aclose()

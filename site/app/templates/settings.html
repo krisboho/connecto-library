@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% set active = "settings" %}
+{% block title %}Settings · Connecto Library{% endblock %}
+{% block content %}
+<div class="head">
+  <h1>Settings</h1>
+  <span class="pill">Admin only</span>
+  <form class="filter" method="post" action="/settings/check"><button class="btn" type="submit">Check now</button></form>
+</div>
+
+{% if all_down %}
+<div class="flash warn" role="alert">Every Anna's Archive mirror has been failing{% if down_for %} for {{ down_for }} minutes{% endif %}. Update the list below.</div>
+{% endif %}
+
+<section class="card block">
+  <div class="block-head"><h2>Sources</h2><span class="muted small">{% if last_run %}last check {{ last_run }}{% else %}not checked yet{% endif %} · every {{ interval }} min</span></div>
+  <div class="tiles">
+    <div class="tile">
+      <div class="tile-h"><span class="dot {{ 'ok' if shelf.ok else 'bad' }}"></span>Anna's Archive &amp; usenet</div>
+      <div class="muted small">via Shelfmark{% if not shelf.configured %} · <strong>not connected</strong>{% elif not shelf.ok %} · <strong>unreachable</strong>{% endif %}</div>
+      <div class="muted small">{% if queue %}Queue: {% for k, v in queue.items() %}{{ v }} {{ k }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}Queue empty{% endif %}</div>
+    </div>
+    <div class="tile">
+      <div class="tile-h"><span class="dot {{ 'ok' if grimmory.ok else 'bad' }}"></span>Library (Grimmory)</div>
+      {% if grimmory.ok %}
+      <div class="muted small">{{ grimmory.version }}{% if grimmory.latest and grimmory.latest != grimmory.version %} · update available: {{ grimmory.latest }}{% endif %}</div>
+      <div class="muted small">{{ grimmory.books }} books · {{ grimmory.users }} people</div>
+      {% else %}<div class="small" style="color: var(--red)">{{ grimmory.error }}</div>{% endif %}
+    </div>
+    <div class="tile">
+      <div class="tile-h"><span class="dot {{ 'ok' if webhook else 'warn' }}"></span>Alerts</div>
+      <div class="muted small">{% if webhook %}Webhook set · fires after {{ alert_after }} min of every mirror failing{% else %}No webhook set · alerts only show here{% endif %}</div>
+      <div class="muted small">{% if last_alert %}Last: {{ last_alert }}{% else %}No alerts yet{% endif %}</div>
+      <form method="post" action="/settings/test-alert"><button class="btn" type="submit">Send test alert</button></form>
+    </div>
+  </div>
+</section>
+
+<section class="card block">
+  <div class="block-head"><h2>Anna's Archive mirrors</h2><span class="muted small">tried in order · saved straight into Shelfmark, no restart</span></div>
+  {% if mirror_error %}<div class="flash warn">{{ mirror_error }}</div>{% endif %}
+  <div class="list">
+  {% for m in mirrors %}
+    <div class="mirror {% if m.checked and not m.ok %}bad{% endif %}">
+      <span class="muted">{{ loop.index }}</span>
+      <span class="url">{{ m.url }}{% if m.primary %} <span class="pill blue">primary</span>{% endif %}</span>
+      <span class="status">
+        {% if not m.checked %}<span class="dot warn"></span>not checked yet
+        {% elif m.ok %}<span class="dot ok"></span>Healthy{% if m.ms %} · {{ m.ms }} ms{% endif %}
+        {% else %}<span class="dot bad"></span>Down{% if m.failing_for %} · {{ m.failing_for }} min{% endif %}{% if m.error %} · {{ m.error }}{% endif %}{% endif %}
+      </span>
+    </div>
+  {% else %}
+    <p class="empty">No mirrors configured in Shelfmark yet.</p>
+  {% endfor %}
+  </div>
+  <form method="post" action="/settings/mirrors" class="form">
+    <label>Mirror addresses, one per line, in the order to try them
+      <textarea name="urls" rows="4" spellcheck="false">{% for m in mirrors %}{{ m.url }}
+{% endfor %}</textarea></label>
+    <label>Primary
+      <select name="primary">
+        <option value="auto" {% if primary == 'auto' %}selected{% endif %}>Auto (try the list in order)</option>
+        {% for m in mirrors %}<option value="{{ m.url }}" {% if m.primary %}selected{% endif %}>{{ m.url }}</option>{% endfor %}
+      </select></label>
+    <div><button class="btn primary" type="submit">Save and test</button></div>
+  </form>
+</section>
+
+<section class="card block">
+  <div class="block-head"><h2>People and Kindles</h2><span class="muted small">accounts live in Grimmory; Kindle shelves are private to each person</span></div>
+  <div class="table">
+    <div class="tr th"><span>Person</span><span>Can</span><span>Kindle shelf</span><span>Last on the site</span></div>
+    {% for p in people %}
+    <div class="tr">
+      <span><strong>{{ p.name }}</strong> <span class="muted small">{{ p.username }}</span>{% if p.admin %} <span class="pill">admin</span>{% endif %}</span>
+      <span class="muted">{% if p.download %}download{% endif %}{% if p.delete %} · delete{% endif %}{% if not p.download and not p.delete %}read only{% endif %}</span>
+      <span class="muted">{{ p.kindle or "—" }}</span>
+      <span class="muted">{{ p.last_seen }}</span>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
