@@ -301,3 +301,10 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
 - **DONE 2026-09-30:** SHELFMARK_API_KEY added to the shelfmark container (recreated with identical config; template my-shelfmark.xml updated, backup my-shelfmark.xml.bak-20260930) and to the site's .env (site container recreated, since `docker restart` doesn't reload an env file). A real search from inside the site container returned Hardcover results. Search/downloads are LIVE.
 - Kris still owes: Cloudflare tunnel hostname for :8430, family accounts, Tailscale on the Kindle, iPads.
 - Next: milestone 3/4 (Settings: mirrors, health, alerts, people; Delete), then usenet-direct hardening if Shelfmark stalls.
+
+## Status 2026-10-01: milestones 3+4 built and deployed
+- **Settings (admin):** source tiles (Shelfmark reachability + queue counts; Grimmory version/books/people; alert status), Anna's Archive mirror list read from and saved to Shelfmark's `mirrors` settings tab (keys AA_MIRROR_URLS list + AA_BASE_URL primary/auto), per-mirror health (ms, down-for), "Check now", people table (Grimmory users + what the site has seen of their Kindle shelf).
+- **Health checker:** in-process loop every HEALTH_INTERVAL_MIN (15) min; a GET on each mirror (<500 or a Cloudflare 503 page counts as alive); results in SQLite. **Alert** via ALERT_WEBHOOK_URL (JSON POST, or ntfy-style if the URL contains "ntfy") once all mirrors have failed ALERT_AFTER_MIN (30) min, and once on recovery. Not set yet on the server, so alerts only show on the Settings page.
+- **Delete (admin / canDeleteBook):** "Delete from library" link on cards → confirm page → Grimmory DELETE /api/v1/books?ids= (removes the file from disk; verified in the harness).
+- Verified in the dev loop (fake Shelfmark + throwaway Grimmory), then deployed to Unraid (same container recipe).
+- **Remaining:** Kris to set ALERT_WEBHOOK_URL (HA webhook or ntfy) if he wants push alerts; tunnel hostname; family accounts; Tailscale on the Kindle; iPads. Hardening ideas: Prowlarr-direct path if Shelfmark stalls; "Send to X's Kindle" for admin (needs per-person service tokens).
