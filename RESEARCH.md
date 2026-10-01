@@ -308,3 +308,8 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
 - **Delete (admin / canDeleteBook):** "Delete from library" link on cards → confirm page → Grimmory DELETE /api/v1/books?ids= (removes the file from disk; verified in the harness).
 - Verified in the dev loop (fake Shelfmark + throwaway Grimmory), then deployed to Unraid (same container recipe).
 - **Remaining:** Kris to set ALERT_WEBHOOK_URL (HA webhook or ntfy) if he wants push alerts; tunnel hostname; family accounts; Tailscale on the Kindle; iPads. Hardening ideas: Prowlarr-direct path if Shelfmark stalls; "Send to X's Kindle" for admin (needs per-person service tokens).
+
+## 2026-10-01 troubleshooting notes
+- **"Cannot execute statement in a READ ONLY transaction" / insert into shelf** in Grimmory's log is a Grimmory bug (issue #2538, closed "not planned"): opening the **Kobo settings** page runs ensureKoboShelfExists inside a read-only transaction. Harmless for us. Shelf creation through the site and the normal API works on MariaDB 13.0.2 (reproduced in the harness: 201).
+- **Progress sync "unknown error"** = wrong sync credentials, not Tailscale: the log shows "KOReader user not found" then "password not match" for the attempts. Grimmory returns 401 with no message, which KOReader shows as "Unknown server error". Only bohannonbs's sync user was updated today (sync_enabled=0 at the time); krisboho's sync password was never changed.
+- `docker restart` does not reload `--env-file`; recreate the container.
