@@ -412,6 +412,36 @@ async def _download_action(request: Request, task_id: str, action: str):
     return response
 
 
+@app.post("/downloads/{task_id}/remove")
+async def remove_download(request: Request, task_id: str):
+    """Remove a finished/failed entry from the history (the site's record only)."""
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/downloads", status_code=303)
+    row = store.get(task_id)
+    if not row or (row["user_id"] != session.user.id and not session.user.is_admin):
+        _flash(response, "That download isn't yours.", "warn")
+        return response
+    if (row.get("last_status") or "") in ACTIVE_STATUSES:
+        _flash(response, "Cancel it first; it's still running.", "warn")
+        return response
+    store.delete_download(task_id)
+    _flash(response, "Removed from your history.")
+    return response
+
+
+@app.post("/downloads/clear")
+async def clear_downloads(request: Request):
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    n = store.delete_finished(None if session.user.is_admin else session.user.id)
+    response = RedirectResponse("/downloads", status_code=303)
+    _flash(response, f"Cleared {n} finished download{'' if n == 1 else 's'} from the history.")
+    return response
+
+
 @app.get("/scover")
 async def shelfmark_cover(request: Request, u: str):
     """Proxy a Shelfmark-cached cover (its /api/covers/... needs the API key)."""

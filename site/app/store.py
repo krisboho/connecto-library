@@ -77,6 +77,21 @@ class Store:
                          (status, message, time.time(), task_id))
         self._db.commit()
 
+    def delete_download(self, task_id: str) -> None:
+        self._db.execute("DELETE FROM downloads WHERE task_id=?", (task_id,))
+        self._db.commit()
+
+    def delete_finished(self, user_id: int | None) -> int:
+        active = ("queued", "resolving", "locating", "downloading")
+        q = "DELETE FROM downloads WHERE COALESCE(last_status,'') NOT IN (?,?,?,?)"
+        args: list = list(active)
+        if user_id is not None:
+            q += " AND user_id=?"
+            args.append(user_id)
+        cur = self._db.execute(q, args)
+        self._db.commit()
+        return cur.rowcount
+
     # -- mirror health ------------------------------------------------------
 
     def record_mirror(self, url: str, ok: bool, ms: int | None, error: str | None) -> None:

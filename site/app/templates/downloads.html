@@ -5,7 +5,10 @@
 <div class="head">
   <h1>Downloads</h1>
   <span class="muted">{% if everyone %}everyone's, newest first{% else %}yours, newest first{% endif %}</span>
-  <form class="filter" method="get" action="/downloads"><button class="btn" type="submit">Refresh</button></form>
+  <div class="filter">
+    <form method="get" action="/downloads"><button class="btn" type="submit">Refresh</button></form>
+    {% if finished %}<form method="post" action="/downloads/clear"><button class="btn" type="submit">Clear finished</button></form>{% endif %}
+  </div>
 </div>
 
 {% if not enabled %}
@@ -54,6 +57,7 @@
       {% if d.status == 'complete' %}<a class="btn" href="/library?q={{ d.title|urlencode }}">Open</a>{% endif %}
       {% if d.retry %}<form method="post" action="/downloads/{{ d.task_id|urlencode }}/retry"><button class="btn" type="submit">Retry</button></form>{% endif %}
       {% if d.failed %}<a class="btn primary" href="/search?q={{ d.title|urlencode }}">Other copies</a>{% endif %}
+      <form method="post" action="/downloads/{{ d.task_id|urlencode }}/remove"><button class="btn ghost" type="submit" aria-label="Remove {{ d.title }} from history">Remove</button></form>
     </div>
   </article>
 {% endfor %}
