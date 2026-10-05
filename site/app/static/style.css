@@ -148,3 +148,4 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
 }
 .admin-link { font-size: 12px; font-weight: 700; color: var(--red); align-self: flex-start; }
 code.url { display: block; margin-top: 6px; padding: 8px 10px; background: var(--ground); border-radius: 8px; font-size: 13px; word-break: break-all; user-select: all; }
+.sortform select { height: 40px; padding: 0 10px; font: inherit; font-size: 14px; font-weight: 600; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface); color: var(--ink); }

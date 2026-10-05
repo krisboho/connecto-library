@@ -6,6 +6,7 @@ send books to / remove them from your own Kindle shelf, read online.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -182,8 +183,19 @@ async def home():
     return RedirectResponse("/library", status_code=303)
 
 
+SORTS = {
+    "added": ("-addedOn", "Recently added"),
+    "title": ("title", "Title A–Z"),
+    "author": ("authorSortName,title", "Author A–Z"),
+    "read": ("-lastReadTime", "Recently read"),
+    "series": ("seriesName,seriesNumber", "Series"),
+    "published": ("-publishedDate", "Newest published"),
+}
+
+
 @app.get("/library", response_class=HTMLResponse)
-async def library(request: Request, q: str = "", view: str = "all", cursor: str | None = None):
+async def library(request: Request, q: str = "", view: str = "all", cursor: str | None = None,
+                  sort: str = "added", partial: int = 0):
     session = _read_session(request)
     if not session:
         return _login_redirect(request)
@@ -206,7 +218,8 @@ async def library(request: Request, q: str = "", view: str = "all", cursor: str 
                 raw_books = [b for b in raw_books if needle in _title(b).lower() or needle in _authors(b).lower()]
             total = len(raw_books)
         else:
-            page = await _call(session, grimmory.books_page, query=q or None, cursor=cursor, size=settings.page_size)
+            sort_key = SORTS.get(sort, SORTS["added"])[0]
+            page = await _call(session, grimmory.books_page, query=q or None, cursor=cursor, size=settings.page_size, sort=sort_key)
             raw_books = page.get("content") or []
             meta = page.get("page") or {}
             total = meta.get("totalElements")
@@ -221,8 +234,16 @@ async def library(request: Request, q: str = "", view: str = "all", cursor: str 
         return _render(request, "error.html", session, message=str(e))
 
     books = [_card(b, kindle_ids) for b in raw_books]
+    if view == "kindle":
+        key = {"title": lambda b: b["title"].lower(), "author": lambda b: (b["authors"].lower(), b["title"].lower()),
+               "added": lambda b: b["added_on"], "read": lambda b: b["added_on"]}.get(sort)
+        if key:
+            books.sort(key=key, reverse=sort in ("added", "read"))
+    if partial:
+        return _render(request, "_books.html", session, books=books, q=q, view=view, sort=sort, next_cursor=next_cursor,
+                       kindle_shelf_missing=session.kindle_shelf_id is None)
     store.touch_person(session.user.id, session.user.username, session.user.name, session.kindle_shelf_id, len(kindle_ids))
-    return _render(request, "library.html", session, books=books, q=q, view=view, total=total,
+    return _render(request, "library.html", session, books=books, q=q, view=view, total=total, sort=sort, sorts=SORTS,
                    kindle_count=len(kindle_ids), next_cursor=next_cursor,
                    kindle_shelf_missing=session.kindle_shelf_id is None, kindle_shelf_id=session.kindle_shelf_id,
                    kindle_shelf_name=settings.kindle_shelf_name)
@@ -287,7 +308,7 @@ async def cover(request: Request, book_id: int):
         r = await grimmory.thumbnail(session.tokens.access, book_id)
     if r.status_code != 200:
         return Response(content=_placeholder_cover(request.query_params.get("t") or "Book"), media_type="image/svg+xml",
-                        headers={"Cache-Control": "private, max-age=3600"})
+                        headers={"Cache-Control": "private, no-cache"})
     return Response(content=r.content, media_type=r.headers.get("content-type", "image/jpeg"),
                     headers={"Cache-Control": "private, max-age=86400"})
 
@@ -717,6 +738,7 @@ def _card(book: dict[str, Any], kindle_ids: set[int]) -> dict[str, Any]:
         "read_status": (book.get("readStatus") or "").replace("_", " ").title(),
         "reader_path": _reader_path(book),
         "added_on": (book.get("addedOn") or "")[:10],
+        "cover_v": re.sub(r"[^0-9]", "", str((book.get("metadata") or {}).get("coverUpdatedOn") or ""))[:14],
     }
 
 

@@ -7,7 +7,7 @@ Mockup: https://claude.ai/artifact/Ey9tW8h61az6cLXeD4rjnN
 ## Decisions (Kris, 2026-09-30)
 - Logins reuse Grimmory accounts. One password per person.
 - Anyone in the family can search and download. Only Kris (Grimmory admin) can delete or change settings.
-- Reachable over Tailscale and the Cloudflare tunnel, like BookLore was (booklore.krisboho.com with Cloudflare Access).
+- Reachable over Tailscale and the Cloudflare tunnel, like BookLore was (grimmory.krisboho.com with Cloudflare Access).
 - Name: Connecto Library. Repo: github.com/krisboho/connecto-library (private).
 
 ## Mockup feedback (Kris, 2026-09-30)
