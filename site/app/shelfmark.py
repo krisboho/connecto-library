@@ -18,7 +18,9 @@ import httpx
 
 
 class ShelfmarkError(Exception):
-    pass
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class Shelfmark:
@@ -94,5 +96,5 @@ class Shelfmark:
             body = None
         if r.status_code >= 400:
             msg = body.get("message") or body.get("error") if isinstance(body, dict) else None
-            raise ShelfmarkError(msg or f"Search service error {r.status_code}.")
+            raise ShelfmarkError(msg or f"Search service error {r.status_code}.", r.status_code)
         return body

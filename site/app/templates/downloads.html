@@ -36,6 +36,7 @@
     <div class="side">
       <span class="pill amber">{{ d.nice }}{% if d.progress is not none %} · {{ d.progress }}%{% endif %}</span>
       <form method="post" action="/downloads/{{ d.task_id|urlencode }}/cancel"><button class="btn" type="submit">Cancel</button></form>
+      <form method="post" action="/downloads/{{ d.task_id|urlencode }}/remove"><button class="btn ghost" type="submit" aria-label="Remove {{ d.title }} from history">Remove</button></form>
     </div>
   </article>
 {% endfor %}

@@ -391,6 +391,14 @@ async def downloads_page(request: Request):
         except ShelfmarkError as e:
             error = str(e)
     rows = [_download_row(d, live.get(d["task_id"])) for d in mine]
+    # Shelfmark answered but doesn't know a task we think is running: it was
+    # restarted (or pruned it). Stop showing it as queued forever.
+    shelfmark_answered = bool(mine) and shelfmark.enabled and error is None
+    import time as _time
+    for row, d in zip(rows, mine):
+        if (shelfmark_answered and row["is_active"] and d["task_id"] not in live
+                and _time.time() - float(d["requested_at"] or 0) > LOST_AFTER_SECONDS):
+            _mark_lost(row)
     for row in rows:
         if row["status"] != row["stored_status"]:
             store.update_status(row["task_id"], row["status"], row["message"])
@@ -429,7 +437,12 @@ async def _download_action(request: Request, task_id: str, action: str):
             store.update_status(task_id, "queued", None)
             _flash(response, "Retrying.")
     except ShelfmarkError as e:
-        _flash(response, str(e), "warn")
+        if action == "cancel" and getattr(e, "status", None) == 404:
+            # Shelfmark doesn't know it any more: nothing to cancel, so stop showing it as running.
+            store.update_status(task_id, "lost", LOST_MESSAGE)
+            _flash(response, "Shelfmark no longer had that download; marked as lost track. You can remove it.", "warn")
+        else:
+            _flash(response, str(e), "warn")
     return response
 
 
@@ -444,11 +457,17 @@ async def remove_download(request: Request, task_id: str):
     if not row or (row["user_id"] != session.user.id and not session.user.is_admin):
         _flash(response, "That download isn't yours.", "warn")
         return response
-    if (row.get("last_status") or "") in ACTIVE_STATUSES:
-        _flash(response, "Cancel it first; it's still running.", "warn")
-        return response
+    note = "Removed from your history."
+    if (row.get("last_status") or "") in ACTIVE_STATUSES and shelfmark.enabled:
+        # Best effort: if Shelfmark still has it, stop it too. If it doesn't
+        # know the task any more, there is nothing to stop.
+        try:
+            await shelfmark.cancel(task_id)
+            note = "Cancelled and removed from your history."
+        except ShelfmarkError:
+            pass
     store.delete_download(task_id)
-    _flash(response, "Removed from your history.")
+    _flash(response, note)
     return response
 
 
@@ -748,7 +767,15 @@ SOURCE_LABELS = {
 }
 ACTIVE_STATUSES = {"queued", "resolving", "locating", "downloading"}
 NICE_STATUS = {"queued": "Queued", "resolving": "Finding file", "locating": "Finding file", "downloading": "Downloading",
-               "complete": "In library", "error": "Failed", "cancelled": "Cancelled"}
+               "complete": "In library", "error": "Failed", "cancelled": "Cancelled", "lost": "Lost track"}
+LOST_MESSAGE = "Shelfmark no longer lists this download (it was probably restarted). Start it again from Search."
+LOST_AFTER_SECONDS = 120  # a brand-new task may not show in Shelfmark's status for a moment
+
+
+def _mark_lost(row: dict[str, Any]) -> dict[str, Any]:
+    row.update(status="lost", nice=NICE_STATUS["lost"], is_active=False, failed=True, retry=False,
+               progress=None, message=LOST_MESSAGE)
+    return row
 
 
 def _author_of(obj: dict[str, Any]) -> str:
