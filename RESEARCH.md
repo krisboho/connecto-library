@@ -320,3 +320,6 @@ Read-only SSH over the `unraid` alias, using key ~/.ssh/claude_unraid.
 - **Metadata refresh failures:** root cause was `Data too long for column 'name'` on `category` (varchar(255)); one oversized category poisoned the Hibernate session and every following book failed with "CategoryEntity has a null identifier". Widened `category.name` to VARCHAR(700) (backup: book-stack/backup/category-20261004.sql). Re-run "Look up missing details online".
 - Library page: continuous scroll (partial loads via `?partial=1`, IntersectionObserver), sort options (added/title/author/read/series/published) mapped to Grimmory sort keys (addedOn, title, authorSortName, lastReadTime, seriesName, publishedDate).
 - Grimmory public address is now https://grimmory.krisboho.com (GRIMMORY_PUBLIC_URL updated in the site's .env).
+
+## 2026-10-04 (night): stuck "in progress" downloads
+Three rows sat in the Downloads queue for days: Shelfmark's /api/status was empty (restarted since), so the site kept the stored "queued" status and Remove was only offered on finished rows. Fix (commit fd3d349, deployed): tasks older than 2 min that Shelfmark no longer lists become "Lost track" (finished bucket, Other copies + Remove); Remove now works on running rows (best-effort cancel in Shelfmark first); Cancel on a 404 marks the row lost. ShelfmarkError now carries the HTTP status.
