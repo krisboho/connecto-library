@@ -224,7 +224,7 @@ async def library(request: Request, q: str = "", view: str = "all", cursor: str 
     store.touch_person(session.user.id, session.user.username, session.user.name, session.kindle_shelf_id, len(kindle_ids))
     return _render(request, "library.html", session, books=books, q=q, view=view, total=total,
                    kindle_count=len(kindle_ids), next_cursor=next_cursor,
-                   kindle_shelf_missing=session.kindle_shelf_id is None,
+                   kindle_shelf_missing=session.kindle_shelf_id is None, kindle_shelf_id=session.kindle_shelf_id,
                    kindle_shelf_name=settings.kindle_shelf_name)
 
 

@@ -147,3 +147,4 @@ h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; }
   .tr { grid-template-columns: 1fr 1fr; } .tr.th { display: none; }
 }
 .admin-link { font-size: 12px; font-weight: 700; color: var(--red); align-self: flex-start; }
+code.url { display: block; margin-top: 6px; padding: 8px 10px; background: var(--ground); border-radius: 8px; font-size: 13px; word-break: break-all; user-select: all; }

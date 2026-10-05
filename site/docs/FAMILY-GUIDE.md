@@ -34,9 +34,14 @@ Do this once per iPad.
 
 **Readest** (the reading app)
 1. Install **Readest** from the App Store (free).
-2. Add the catalog: address `http://100.95.26.46:6060/api/v1/opds`, with your library username and password.
-3. Turn on reading-position sync: choose KOReader sync, server `http://100.95.26.46:6060/api/koreader`, same username and password.
-4. Browse the catalog, tap a book to download it, and read. Your place syncs with your Kindle.
+2. On the site, open **Library → On my Kindle**. Copy the address shown under **Use this list on an iPad**.
+3. In Readest, add a catalog with that address and your OPDS login. The catalog shows exactly the books you've sent to your Kindle.
+4. Turn on reading-position sync: choose KOReader sync, server `http://100.95.26.46:6060/api/koreader`, same username and password as the KOReader sync login.
+5. Tap a book in the catalog to download it, and read. Your place syncs with your Kindle.
+
+Sending a book to your Kindle does **not** push it to the iPad by itself. It appears in the Readest catalog, and you tap it once to download. That's an Apple limitation, not something we can change.
+
+Want the whole library instead of just your list? Use `http://100.95.26.46:6060/api/v1/opds` as the catalog address.
 
 Your library profile needs an OPDS login and a KOReader sync login for this. Ask Kris if yours isn't set up.
 

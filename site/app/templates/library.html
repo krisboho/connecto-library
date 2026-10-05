@@ -27,6 +27,16 @@
 </div>
 {% endif %}
 
+{% if not kindle_shelf_missing and view == 'kindle' %}
+<div class="notice">
+  <div>
+    <strong>Use this list on an iPad.</strong>
+    <span class="muted">In Readest, add a catalog with this address and your OPDS login. New books you send here show up there, one tap each to download.</span>
+    <code class="url">{{ grimmory_public_url }}/api/v1/opds/catalog?shelfId={{ kindle_shelf_id }}</code>
+  </div>
+</div>
+{% endif %}
+
 {% if not books %}
 <p class="empty">{% if view == 'kindle' %}Nothing on your Kindle yet. Pick a book and tap <strong>Send to my Kindle</strong>.{% else %}No books match.{% endif %}</p>
 {% endif %}
