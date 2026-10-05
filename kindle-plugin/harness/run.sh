@@ -76,6 +76,9 @@ check "3 books downloaded"                  "has 'Book One [$B1].epub' && has 'B
 check "user's own file left untouched"      "grep -q \"user's own file\" '$DEV/Book One.epub'"
 check "downloaded bytes identical to server" "cmp -s work/books/'Book Two.epub' '$DEV/Book Two.epub'"
 check "no .part leftovers"                  "! ls $DEV/*.part >/dev/null 2>&1"
+check "route recorded (direct, no proxy)"    "grep -q 'via http://grimmory:6060 (direct)' work/koreader.log"
+check "per-file speed logged"               "grep -q 'ShelfSync: downloaded .* in [0-9]*s' work/koreader.log"
+check "progress file cleaned up"            "[[ ! -f work/kohome/koreader/settings/shelfsync_progress.json ]]"
 
 echo "== server: take Two off shelf, delete Three from library, add Four and Five"
 unassign "$B2"

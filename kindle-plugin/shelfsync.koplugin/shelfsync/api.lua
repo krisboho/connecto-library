@@ -8,8 +8,9 @@ Endpoints used (all present in Grimmory v3.5.0):
   GET  /api/v1/shelves/{id}/books      books on one shelf (with primaryFile)
   GET  /api/v1/books/{id}/download     original file bytes (needs download permission)
 
-Plain HTTP is expected (LAN or a Tailscale 100.x address). KOReader's global
-HTTP proxy setting (used by Tailscale userspace mode) applies automatically.
+Each client is bound to one route: direct, or through one HTTP proxy (the
+Tailscale userspace proxy KOReader is configured with). LuaSocket only has a
+global proxy setting, so it is swapped in around each request and restored.
 ]]
 
 local http = require("socket.http")
@@ -27,9 +28,15 @@ local function decode(text)
     return nil
 end
 
-function Api.new(base_url)
+-- proxy: nil for a direct connection, or an "http://host:port" proxy URL.
+function Api.new(base_url, proxy)
     local base = tostring(base_url or ""):gsub("%s+", ""):gsub("/+$", "")
-    return setmetatable({ base = base, token = nil }, Api)
+    if proxy == "" then proxy = nil end
+    return setmetatable({ base = base, token = nil, proxy = proxy }, Api)
+end
+
+function Api:routeName()
+    return self.proxy and "proxy" or "direct"
 end
 
 -- Returns code (number or nil), body text, error string.
@@ -50,6 +57,8 @@ function Api:_request(method, path, body, sink)
         source = ltn12.source.string(encoded)
     end
     local chunks = {}
+    local saved_proxy = http.PROXY
+    http.PROXY = self.proxy
     local ok, code = pcall(function()
         local r, c = http.request {
             url = self.base .. path,
@@ -61,6 +70,7 @@ function Api:_request(method, path, body, sink)
         if not r then return c end -- c is an error string here
         return c
     end)
+    http.PROXY = saved_proxy
     if not ok then
         return nil, nil, tostring(code)
     end
@@ -129,14 +139,24 @@ function Api:shelfBooks(shelf_id)
     return body
 end
 
--- Streams a book to dest_path. Returns ok, err, bytes_written.
-function Api:download(book_id, dest_path)
+-- Streams a book to dest_path. on_progress(bytes_so_far) is called per chunk.
+-- Returns ok, err, bytes_written.
+function Api:download(book_id, dest_path, on_progress)
     local fh, open_err = io.open(dest_path, "wb")
     if not fh then return false, "cannot write " .. dest_path .. ": " .. tostring(open_err) end
+    local file_sink = ltn12.sink.file(fh)
+    local written = 0
+    local sink = function(chunk, err)
+        if chunk then
+            written = written + #chunk
+            if on_progress then on_progress(written) end
+        end
+        return file_sink(chunk, err)
+    end
     -- Long block timeout for slow links (Tailscale relays); no total cap.
     socketutil:set_timeout(30, -1)
     local code, _, err = self:_request("GET",
-        "/api/v1/books/" .. tostring(tonumber(book_id)) .. "/download", nil, ltn12.sink.file(fh))
+        "/api/v1/books/" .. tostring(tonumber(book_id)) .. "/download", nil, sink)
     socketutil:reset_timeout()
     -- ltn12.sink.file closes the handle at end of stream.
     if code ~= 200 then

@@ -9,6 +9,9 @@ Runs automatically when the device wakes or Wi-Fi connects, and on demand.
 
 Network work happens in a forked subprocess (shelfsync/job.lua) so the reader
 never freezes; the main process applies deletions and updates the manifest.
+The subprocess reports progress through a small JSON file; the main process
+reads it once a second and shows a live box ("Sync now") or short toasts
+(automatic syncs), and the menu shows "Syncing now: …" while it runs.
 ]]
 
 local ConfirmBox = require("ui/widget/confirmbox")
@@ -33,10 +36,13 @@ local Plan = require("shelfsync/plan")
 
 local SETTINGS_FILE = DataStorage:getSettingsDir() .. "/shelfsync.lua"
 local MANIFEST_FILE = DataStorage:getSettingsDir() .. "/shelfsync_manifest.lua"
+local PROGRESS_FILE = DataStorage:getSettingsDir() .. "/shelfsync_progress.json"
 local POLL_SECONDS = 1
 local JOB_TIMEOUT_SECONDS = 30 * 60
 local WAKE_RETRY_SECONDS = 5
 local WAKE_RETRY_LIMIT = 12 -- ~60s of waiting for Wi-Fi after wake
+local BOX_REFRESH_SECONDS = 2 -- live box repaint rate (e-ink friendly)
+local BIG_FILE_KB = 20 * 1024 -- files this size get percent toasts in automatic syncs
 
 -- Shared across plugin instances (the file manager and the reader each create
 -- one); the module file is loaded once, so this table is a singleton.
@@ -44,6 +50,13 @@ local state = {
     running = false,
     settings = nil,
     manifest = nil,
+    progress = nil,      -- last progress table read from the subprocess
+    box = nil,           -- live InfoMessage while a manual sync runs
+    box_wanted = false,  -- false once the user taps the box away
+    box_text = nil,
+    box_at = 0,
+    box_closing = false, -- our own close in progress: not a user dismissal
+    last_toast_key = nil,
 }
 
 local function settings()
@@ -83,10 +96,168 @@ local function refreshFileBrowser()
     end
 end
 
+---------------------------------------------------------------------------
+-- Progress: read what the subprocess reports and turn it into words
+---------------------------------------------------------------------------
+
+local function readProgress()
+    local fh = io.open(PROGRESS_FILE, "rb")
+    if not fh then return nil end
+    local raw = fh:read("*a")
+    fh:close()
+    local ok, p = pcall(json.decode, raw, json.decode.simple)
+    if ok and type(p) == "table" then return p end
+    return nil
+end
+
+local function fmtSize(bytes)
+    bytes = tonumber(bytes) or 0
+    if bytes >= 100 * 1048576 then return string.format("%d MB", bytes / 1048576) end
+    if bytes >= 1048576 then return string.format("%.1f MB", bytes / 1048576) end
+    return string.format("%d KB", bytes / 1024)
+end
+
+local function fmtSpeed(bytes_per_s)
+    if not bytes_per_s or bytes_per_s <= 0 then return nil end
+    if bytes_per_s >= 1048576 then return string.format("%.1f MB/s", bytes_per_s / 1048576) end
+    return string.format("%d KB/s", bytes_per_s / 1024)
+end
+
+local function fmtDuration(seconds)
+    if seconds < 60 then return T(_("%1 s"), math.floor(seconds)) end
+    return T(_("%1 min"), math.floor(seconds / 60 + 0.5))
+end
+
+local function routeLabel(route)
+    if route == "proxy" then return _("via Tailscale") end
+    return _("direct")
+end
+
+-- Numbers behind a download stage: percent, speed, time left.
+local function downloadStats(p)
+    local bytes = tonumber(p.bytes) or 0
+    local size = (tonumber(p.size_kb) or 0) * 1024
+    local elapsed = math.max(1, os.time() - (tonumber(p.file_started) or os.time()))
+    local speed = bytes > 0 and bytes / elapsed or nil
+    local pct = size > 0 and math.min(100, math.floor(bytes * 100 / size)) or nil
+    local left = (speed and size > bytes) and (size - bytes) / speed or nil
+    return bytes, size, pct, speed, left
+end
+
+-- compact=true gives a one-line toast; otherwise a multi-line box text.
+local function progressText(p, compact)
+    local sep = compact and " · " or "\n"
+    local head = compact and "Shelf Sync: " or _("Shelf Sync") .. "\n"
+    if not p or not p.stage then
+        return head .. _("starting…")
+    end
+    if p.stage == "connect" then
+        return head .. T(_("connecting to %1 (%2)…"), tostring(p.server or ""), routeLabel(p.route))
+    elseif p.stage == "login" then
+        return head .. _("signing in…")
+    elseif p.stage == "shelf" then
+        return head .. _("reading the shelf…")
+    elseif p.stage == "plan" then
+        local n = tonumber(p.total) or 0
+        if n == 0 then return head .. _("nothing new to download") end
+        return head .. T(_("%1 to download (%2)"),
+            n == 1 and _("1 book") or T(_("%1 books"), n), fmtSize((tonumber(p.total_kb) or 0) * 1024))
+    elseif p.stage == "download" then
+        local bytes, size, pct, speed, left = downloadStats(p)
+        local name = tostring(p.name or ""):gsub("%.[^.]+$", "")
+        local parts = {}
+        if compact then
+            parts[1] = T(_("%1 of %2"), p.step or 1, p.total or 1)
+            parts[2] = name
+            if pct then parts[#parts + 1] = pct .. "%" end
+            if speed then parts[#parts + 1] = fmtSpeed(speed) end
+            if tonumber(p.attempt) and p.attempt > 1 then parts[#parts + 1] = _("retrying") end
+            return head .. table.concat(parts, sep)
+        end
+        parts[1] = T(_("downloading %1 of %2"), p.step or 1, p.total or 1)
+        parts[2] = name
+        local line = pct and T(_("%1% of %2"), pct, fmtSize(size)) or fmtSize(bytes)
+        if speed then line = line .. " · " .. fmtSpeed(speed) end
+        if left then line = line .. " · " .. T(_("about %1 left"), fmtDuration(left)) end
+        parts[3] = line
+        if tonumber(p.attempt) and p.attempt > 1 then parts[4] = _("second try after an interrupted download") end
+        parts[#parts + 1] = _("(tap to hide; it keeps syncing)")
+        return head .. table.concat(parts, sep)
+    elseif p.stage == "done" then
+        return head .. _("finishing…")
+    end
+    return head .. tostring(p.stage)
+end
+
+-- Something worth a toast during an automatic sync? Returns a key that
+-- changes only at milestones: the plan, each new file, and 25% steps of big files.
+local function toastKey(p)
+    if not p or not p.stage then return nil end
+    if p.stage == "plan" then
+        return (tonumber(p.total) or 0) > 0 and "plan" or nil
+    elseif p.stage == "download" then
+        local key = "file" .. tostring(p.step)
+        if (tonumber(p.size_kb) or 0) >= BIG_FILE_KB then
+            local _, _, pct = downloadStats(p)
+            key = key .. ":" .. tostring(math.floor((pct or 0) / 25))
+        end
+        return key
+    end
+    return nil
+end
+
 local ShelfSync = WidgetContainer:extend{
     name = "shelfsync",
     is_doc_only = false,
 }
+
+---------------------------------------------------------------------------
+-- Live progress box (manual sync) and toasts (automatic sync)
+---------------------------------------------------------------------------
+
+local function closeBox()
+    if state.box then
+        state.box_closing = true
+        UIManager:close(state.box)
+        state.box_closing = false
+        state.box = nil
+    end
+end
+
+local function showBox(text)
+    closeBox()
+    state.box = InfoMessage:new{
+        text = text,
+        dismiss_callback = function()
+            -- InfoMessage calls this on every close, ours included.
+            if not state.box_closing then
+                state.box_wanted = false -- user tapped it away: toasts from here on
+                state.box = nil
+            end
+        end,
+    }
+    state.box_text = text
+    state.box_at = os.time()
+    UIManager:show(state.box)
+end
+
+local function onProgress(p)
+    state.progress = p
+    local now = os.time()
+    if state.box_wanted then
+        local text = progressText(p, false)
+        local stage_change = p and p.stage ~= "download"
+        if text ~= state.box_text and (stage_change or now - state.box_at >= BOX_REFRESH_SECONDS) then
+            showBox(text)
+        end
+        return
+    end
+    local key = toastKey(p)
+    if key and key ~= state.last_toast_key then
+        state.last_toast_key = key
+        Notification:notify(progressText(p, true), Notification.SOURCE_ALWAYS_SHOW)
+    end
+end
 
 ---------------------------------------------------------------------------
 -- Settings helpers
@@ -176,6 +347,12 @@ end
 
 function ShelfSync:onCloseWidget()
     self:onSuspend()
+    -- The file manager or reader that owns this instance is closing (for
+    -- example a book is being opened); a modal box must not outlive it.
+    if state.box then
+        state.box_wanted = false
+        closeBox()
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -185,7 +362,8 @@ end
 function ShelfSync:syncNow(interactive)
     if state.running then
         if interactive then
-            UIManager:show(InfoMessage:new{ text = _("Shelf Sync is already running."), timeout = 2 })
+            state.box_wanted = true
+            showBox(progressText(state.progress, false))
         end
         return
     end
@@ -228,11 +406,17 @@ function ShelfSync:_start(interactive)
         shelf_id = s:readSetting("shelf_id"),
         folder = self:getFolder(),
         open_path = openDocumentPath(),
+        proxy = require("socket.http").PROXY, -- KOReader's HTTP proxy (Tailscale userspace mode)
+        progress_file = PROGRESS_FILE,
     }
     local snapshot = manifestBooks()
 
+    os.remove(PROGRESS_FILE)
+    state.progress = nil
+    state.last_toast_key = nil
+    state.box_wanted = interactive and true or false
     if interactive then
-        Notification:notify(_("Shelf Sync: syncing…"), Notification.SOURCE_ALWAYS_SHOW)
+        showBox(progressText(nil, false))
     end
     UIManager:preventStandby()
 
@@ -272,6 +456,8 @@ function ShelfSync:_start(interactive)
             self:_reap(pid)
             self:_finish(interactive, { ok = false, error = "sync timed out" })
         else
+            local p = readProgress()
+            if p then onProgress(p) end
             UIManager:scheduleIn(POLL_SECONDS, poll)
         end
     end
@@ -322,6 +508,10 @@ end
 function ShelfSync:_finish(interactive, res)
     state.running = false
     UIManager:allowStandby()
+    closeBox()
+    state.box_wanted = false
+    state.progress = nil
+    os.remove(PROGRESS_FILE)
     local s = settings()
     s:saveSetting("last_finished", os.time())
 
@@ -343,6 +533,9 @@ function ShelfSync:_finish(interactive, res)
     for _, dl in ipairs(res.downloaded or {}) do
         books[tostring(dl.id)] = { path = dl.path, file_id = dl.file_id }
         added = added + 1
+        local secs = math.max(1, tonumber(dl.seconds) or 1)
+        logger.info("ShelfSync: downloaded", dl.path, fmtSize(dl.bytes), "in", secs .. "s",
+            fmtSpeed((tonumber(dl.bytes) or 0) / secs) or "")
         if dl.replaces and dl.replaces ~= dl.path and dl.replaces ~= open_path then
             deleteBookFile(dl.replaces)
         end
@@ -360,7 +553,8 @@ function ShelfSync:_finish(interactive, res)
         if failed > 0 then summary = summary .. T(_(", %1 failed"), failed) end
         local waiting = deferred + (kept_extra or 0)
         if waiting > 0 then summary = summary .. T(_(", %1 waiting"), waiting) end
-        s:saveSetting("last_result", summary .. " — " .. os.date("%Y-%m-%d %H:%M") .. " via " .. tostring(res.server))
+        s:saveSetting("last_result", summary .. " — " .. os.date("%Y-%m-%d %H:%M") .. " via " .. tostring(res.server)
+            .. " (" .. routeLabel(res.route) .. ")")
         s:saveSetting("last_success", os.time())
         s:flush()
         if interactive or added > 0 or removed > 0 or failed > 0 then
@@ -438,7 +632,8 @@ function ShelfSync:chooseShelf(touchmenu_instance)
         UIManager:show(wait)
         UIManager:forceRePaint()
         local Job = require("shelfsync/job")
-        local shelves, err = Job.listShelves(self:getUrls(), s:readSetting("username"), s:readSetting("password"))
+        local shelves, err = Job.listShelves(self:getUrls(), s:readSetting("username"), s:readSetting("password"),
+            require("socket.http").PROXY)
         UIManager:close(wait)
         if not shelves then
             UIManager:show(InfoMessage:new{ text = T(_("Could not load shelves: %1"), tostring(err)), icon = "notice-warning" })
@@ -531,10 +726,19 @@ function ShelfSync:addToMainMenu(menu_items)
             },
             {
                 text_func = function()
+                    if state.running then
+                        local short = progressText(state.progress, true):gsub("^Shelf Sync: ", "")
+                        return T(_("Syncing now: %1"), short)
+                    end
                     return settings():readSetting("last_result") or _("Last sync: never")
                 end,
                 keep_menu_open = true,
                 callback = function()
+                    if state.running then
+                        state.box_wanted = true
+                        showBox(progressText(state.progress, false))
+                        return
+                    end
                     UIManager:show(InfoMessage:new{
                         text = settings():readSetting("last_result") or _("No sync has run yet."),
                     })

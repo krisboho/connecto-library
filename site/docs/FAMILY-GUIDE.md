@@ -24,6 +24,8 @@ If a download fails, tap **Retry** or **Other copies**.
 
 The first time, the site asks you to **Create my Kindle shelf**. Tap it once.
 
+**How long does it take?** A normal novel arrives in a few seconds. Cookbooks and comics with lots of pictures can be 100 MB or more (the size is shown on the book's card) and take a minute or two. On the Kindle, open **Tools → Shelf Sync → Sync now** to watch it: you'll see the book name, the percent done and the speed. Tap the box to hide it; the sync keeps going. Automatic syncs show short messages at the top of the screen instead.
+
 ## Read on an iPad
 Do this once per iPad.
 

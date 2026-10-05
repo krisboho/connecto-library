@@ -8,8 +8,13 @@ Shelf Sync keeps a folder on a KOReader device matching one Grimmory shelf.
   - It only deletes files that it downloaded itself.
   - It never deletes or replaces the book that is currently open. That change waits until the next sync after the book is closed.
   - An automatic sync refuses to remove more than 10 books at once when that would be over half of what it manages. A manual "Sync now" asks first.
-- **Downloads happen in a background process,** so the reader never freezes. Each file downloads to a `.part` file, is size-checked, and is only then renamed. A sync that gets interrupted by sleep simply resumes next time.
+- **Downloads happen in a background process,** so the reader never freezes. Each file downloads to a `.part` file, is size-checked, and is only then renamed. A sync that gets interrupted by sleep simply resumes next time. A download that breaks off (Wi-Fi blip, Tailscale restarting) gets one automatic retry.
+- **You can see it working.** "Sync now" shows a live box: which file, percent, speed and time left. Tap it to hide it; the sync keeps going. Automatic syncs show short toasts instead: when downloads start, at 25/50/75 % of big files, and a summary at the end. While a sync runs, the Shelf Sync menu's last line reads "Syncing now: …" and tapping it brings the live box back.
+- **Fast at home.** The home address is tried as a direct connection first, so at home the download does not pass through the Tailscale proxy (which costs a third of the speed and a share of the Kindle's single CPU core). The away address goes through the proxy, as it must. The "Last sync" line says which route was used.
 - **Files are byte-identical to the server copy.** That keeps KOReader's progress sync (KOSync, set to Binary matching) working with Grimmory.
+
+## How long should a sync take?
+On this Kindle a plain novel (2–6 MB) lands in a second or two. Photo-heavy cookbooks and comics can be 100–400 MB; at the measured 4 MB/s at home that is 30 s to 2 min per book, and longer through Tailscale or while you are reading at the same time (one CPU core does both). The live box or the toasts show the speed, so "slow" and "stuck" look different.
 
 ## Install on the Kindle
 1. Connect the Kindle over USB.

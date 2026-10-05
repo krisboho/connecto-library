@@ -183,6 +183,48 @@ function Plan.sizeOk(actual_bytes, size_kb)
     return math.abs(actual_bytes - size_kb * 1024) <= 2048
 end
 
+-- True for addresses on the home LAN (or any name without dots), where the
+-- Tailscale userspace proxy is a detour. Tailscale's own 100.64/10 range is
+-- deliberately NOT private here: those need the proxy.
+function Plan.isPrivateHost(url)
+    local host = type(url) == "string" and url:match("^%a+://([^/:]+)") or nil
+    if not host then return false end
+    host = host:lower()
+    if host == "localhost" then return true end
+    local a, b = host:match("^(%d+)%.(%d+)%.%d+%.%d+$")
+    if a then
+        a, b = tonumber(a), tonumber(b)
+        return a == 10 or a == 127 or (a == 192 and b == 168)
+            or (a == 172 and b >= 16 and b <= 31) or (a == 169 and b == 254)
+    end
+    return not host:find(".", 1, true) or host:match("%.local$") ~= nil
+        or host:match("%.lan$") ~= nil or host:match("%.home$") ~= nil
+end
+
+--[[
+Connection attempts, in order. Each is { url, proxy } where proxy is nil
+(connect directly) or KOReader's HTTP proxy URL (the Tailscale userspace proxy).
+LAN addresses go direct first: the proxy costs a third of the throughput and
+competes for the single CPU core. Everything else goes through the proxy first.
+]]
+function Plan.routes(urls, proxy)
+    local routes = {}
+    for _, url in ipairs(urls or {}) do
+        if type(url) == "string" and url:match("%S") then
+            if not proxy or proxy == "" then
+                routes[#routes + 1] = { url = url }
+            elseif Plan.isPrivateHost(url) then
+                routes[#routes + 1] = { url = url }
+                routes[#routes + 1] = { url = url, proxy = proxy }
+            else
+                routes[#routes + 1] = { url = url, proxy = proxy }
+                routes[#routes + 1] = { url = url }
+            end
+        end
+    end
+    return routes
+end
+
 function Plan.isMassDelete(n_delete, n_manifest)
     return n_delete > Plan.MASS_DELETE_MIN and n_delete > (n_manifest / 2)
 end
