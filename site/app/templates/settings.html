@@ -73,6 +73,25 @@
 </section>
 
 <section class="card block">
+  <div class="block-head"><h2>Library tools</h2><span class="muted small">covers and details come from Grimmory; these buttons ask it to fill in what's missing</span></div>
+  <div class="tiles">
+    <div class="tile">
+      <div class="tile-h">Rebuild missing covers</div>
+      <div class="muted small">Pulls the cover image out of each book file. Fast, works offline. Use this first.</div>
+      <form method="post" action="/settings/covers" style="display: flex; gap: 8px; flex-wrap: wrap">
+        <input type="hidden" name="scope" value="missing">
+        <button class="btn primary" type="submit">Rebuild missing covers</button>
+      </form>
+    </div>
+    <div class="tile">
+      <div class="tile-h">Look up missing details online</div>
+      <div class="muted small">Asks Google Books, Open Library and the other sources Grimmory has enabled for descriptions, series, and covers for books still lacking them. Only fills gaps; never overwrites what you have.</div>
+      <form method="post" action="/settings/metadata"><button class="btn" type="submit">Look up missing details</button></form>
+    </div>
+  </div>
+</section>
+
+<section class="card block">
   <div class="block-head"><h2>People and Kindles</h2><span class="muted small">accounts live in Grimmory; Kindle shelves are private to each person</span></div>
   <div class="table">
     <div class="tr th"><span>Person</span><span>Can</span><span>Kindle shelf</span><span>Last on the site</span></div>

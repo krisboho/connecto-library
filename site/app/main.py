@@ -576,6 +576,52 @@ async def test_alert(request: Request):
     return response
 
 
+@app.post("/settings/covers")
+async def regenerate_covers(request: Request, scope: str = Form("missing")):
+    """Rebuild cover images from the book files themselves (no internet needed)."""
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/settings", status_code=303)
+    if not session.user.is_admin:
+        return response
+    try:
+        await _call(session, grimmory.regenerate_covers, missing_only=(scope != "all"))
+        _flash(response, "Cover rebuild started in Grimmory. Covers appear over the next few minutes; reload the library to see them.")
+    except (AuthError, GrimmoryError) as e:
+        _flash(response, str(e), "warn")
+    if session.dirty:
+        _write_session(response, session)
+    return response
+
+
+@app.post("/settings/metadata")
+async def fetch_metadata(request: Request):
+    """Ask Grimmory to look up missing details and covers online for every library."""
+    session = _read_session(request)
+    if not session:
+        return _login_redirect(request)
+    response = RedirectResponse("/settings", status_code=303)
+    if not session.user.is_admin:
+        return response
+    try:
+        libs = await _call(session, grimmory.libraries)
+        started = 0
+        for lib in libs:
+            await _call(session, grimmory.start_task, "REFRESH_METADATA_MANUAL", {
+                "refreshType": "LIBRARY", "libraryId": int(lib["id"]),
+                "refreshOptions": {"refreshCovers": True, "replaceMode": "REPLACE_MISSING",
+                                   "reviewBeforeApply": False, "mergeCategories": True},
+            })
+            started += 1
+        _flash(response, f"Online metadata lookup started for {started} librar{'y' if started == 1 else 'ies'}. It fills in missing descriptions, details and covers; this can take a while.")
+    except (AuthError, GrimmoryError) as e:
+        _flash(response, str(e), "warn")
+    if session.dirty:
+        _write_session(response, session)
+    return response
+
+
 @app.get("/books/{book_id}/delete", response_class=HTMLResponse)
 async def delete_confirm(request: Request, book_id: int, back: str = "/library"):
     session = _read_session(request)

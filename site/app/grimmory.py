@@ -138,6 +138,29 @@ class Grimmory:
     async def book(self, access: str, book_id: int) -> dict[str, Any]:
         return await self._get(f"/api/v1/books/{int(book_id)}", access)
 
+    async def libraries(self, access: str) -> list[dict[str, Any]]:
+        return await self._get("/api/v1/libraries", access)
+
+    async def regenerate_covers(self, access: str, *, missing_only: bool = True) -> None:
+        r = await self._client.post("/api/v1/books/regenerate-covers", headers=_auth(access),
+                                    params={"missingOnly": "true" if missing_only else "false"}, timeout=60.0)
+        if r.status_code == 401:
+            raise AuthError("unauthorized")
+        if r.status_code not in (200, 202, 204):
+            raise GrimmoryError(_message(r, "Could not start cover regeneration"))
+
+    async def start_task(self, access: str, task_type: str, options: dict[str, Any]) -> dict[str, Any]:
+        r = await self._client.post("/api/v1/tasks/start", headers=_auth(access),
+                                    json={"taskType": task_type, "options": options}, timeout=60.0)
+        if r.status_code == 401:
+            raise AuthError("unauthorized")
+        if r.status_code not in (200, 201, 202):
+            raise GrimmoryError(_message(r, "Could not start the task"))
+        try:
+            return r.json()
+        except ValueError:
+            return {}
+
     # -- helpers ------------------------------------------------------------
 
     async def _get(self, path: str, access: str, params: dict[str, Any] | None = None) -> Any:
