@@ -8,6 +8,7 @@ when they recover).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from typing import Any
@@ -137,8 +138,62 @@ class Health:
         for url, (ok, ms, err) in zip(mirrors, results):
             self.store.record_mirror(url, ok, ms, err)
         self.store.set_kv("last_health_run", str(now))
+        if mirrors:
+            await self.check_membership(mirrors)
         await self._maybe_alert(mirrors)
+        await self._maybe_alert_membership()
         return {"mirrors": dict(zip(mirrors, results))}
+
+    # -- Anna's Archive membership ------------------------------------------------
+
+    async def check_membership(self, mirrors: list[str]) -> dict[str, Any]:
+        """Ask a mirror's fast-download API about a non-existent file.
+
+        A valid membership answers 404 "Record not found"; an invalid key 401
+        "Invalid secret key"; a lapsed membership 403 "Not a member". The fake
+        id means no download is ever spent.
+        """
+        result: dict[str, Any] = {"state": "unknown", "at": time.time()}
+        try:
+            key = await self.shelfmark.donator_key()
+        except ShelfmarkError as e:
+            result.update(state="unknown", detail=str(e))
+            return result
+        if not key:
+            result.update(state="none", detail="No membership key in Shelfmark")
+            return result
+        healthy = [u for u in mirrors if (self.store.mirror_health().get(u) or {}).get("ok")] or mirrors
+        for url in healthy[:2]:
+            try:
+                async with httpx.AsyncClient(timeout=20.0, follow_redirects=True,
+                                             headers={"User-Agent": "Mozilla/5.0 (connecto-library)"}) as c:
+                    r = await c.get(f"{url}/dyn/api/fast_download.json",
+                                    params={"md5": "0" * 32, "key": key})
+                try:
+                    err = str((r.json() or {}).get("error") or "")
+                except ValueError:
+                    err = ""
+                if r.status_code == 404 or "not found" in err.lower():
+                    result.update(state="active", detail="Fast downloads available", mirror=url)
+                elif r.status_code == 403 or "not a member" in err.lower():
+                    result.update(state="expired", detail="Anna's Archive says: not a member (membership lapsed)", mirror=url)
+                elif r.status_code == 401 or "secret key" in err.lower():
+                    result.update(state="invalid", detail="Anna's Archive says: invalid secret key", mirror=url)
+                else:
+                    result.update(state="unknown", detail=f"Unexpected answer HTTP {r.status_code} {err[:60]}", mirror=url)
+                    continue
+                break
+            except httpx.HTTPError as e:
+                result.update(state="unknown", detail=f"Could not reach {url} ({e.__class__.__name__})")
+        self.store.set_kv("membership", json.dumps(result))
+        return result
+
+    def membership(self) -> dict[str, Any] | None:
+        raw = self.store.get_kv("membership")
+        try:
+            return json.loads(raw) if raw else None
+        except ValueError:
+            return None
 
     # -- alerts -----------------------------------------------------------------
 
@@ -162,6 +217,18 @@ class Health:
         elif not down and alerted:
             await self.notify("Connecto Library: mirrors are back", "At least one Anna's Archive mirror is reachable again.", "default")
             self.store.set_kv("mirrors_alerted", None)
+
+    async def _maybe_alert_membership(self) -> None:
+        m = self.membership() or {}
+        bad = m.get("state") in ("expired", "invalid")
+        alerted = self.store.get_kv("membership_alerted") == "1"
+        if bad and not alerted:
+            await self.notify("Connecto Library: Anna's Archive membership problem",
+                              f"{m.get('detail')}. Fast downloads are off until the key is renewed in Shelfmark.", "high")
+            self.store.set_kv("membership_alerted", "1")
+        elif m.get("state") == "active" and alerted:
+            await self.notify("Connecto Library: Anna's Archive membership is active again", "Fast downloads are back.", "default")
+            self.store.set_kv("membership_alerted", None)
 
     async def notify(self, title: str, message: str, priority: str = "default") -> bool:
         url = self.settings.alert_webhook_url

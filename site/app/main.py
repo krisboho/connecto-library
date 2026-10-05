@@ -520,7 +520,9 @@ async def settings_page(request: Request):
             "last_seen": _ago(p.get("last_seen")) if p.get("last_seen") else "never used the site",
         })
 
-    return _render(request, "settings.html", session, grimmory=grimmory_info, shelf=shelf_info,
+    membership = health.membership() or {"state": "unknown", "detail": "Not checked yet"}
+    membership["ago"] = _ago(membership.get("at")) if membership.get("at") else None
+    return _render(request, "settings.html", session, grimmory=grimmory_info, shelf=shelf_info, membership=membership,
                    mirrors=mirror_rows, primary=primary, mirror_error=mirror_error, all_down=all_down,
                    down_for=_mins_since(since) if since else None, queue=queue_counts,
                    last_run=_ago(float(last_run)) if last_run else None, people=people_rows,

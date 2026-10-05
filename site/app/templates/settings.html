@@ -21,6 +21,11 @@
       <div class="muted small">{% if queue %}Queue: {% for k, v in queue.items() %}{{ v }} {{ k }}{% if not loop.last %} · {% endif %}{% endfor %}{% else %}Queue empty{% endif %}</div>
     </div>
     <div class="tile">
+      <div class="tile-h"><span class="dot {{ 'ok' if membership.state == 'active' else ('warn' if membership.state in ('unknown', 'none') else 'bad') }}"></span>Anna's Archive membership</div>
+      <div class="muted small">{% if membership.state == 'active' %}Active · fast downloads on{% elif membership.state == 'expired' %}<strong style="color: var(--red)">Lapsed</strong> · downloads fall back to the slow servers{% elif membership.state == 'invalid' %}<strong style="color: var(--red)">Key rejected</strong> · check the key in Shelfmark{% elif membership.state == 'none' %}No key set in Shelfmark{% else %}Unknown{% endif %}</div>
+      <div class="muted small">{{ membership.detail }}{% if membership.ago %} · checked {{ membership.ago }}{% endif %}</div>
+    </div>
+    <div class="tile">
       <div class="tile-h"><span class="dot {{ 'ok' if grimmory.ok else 'bad' }}"></span>Library (Grimmory)</div>
       {% if grimmory.ok %}
       <div class="muted small">{{ grimmory.version }}{% if grimmory.latest and grimmory.latest != grimmory.version %} · update available: {{ grimmory.latest }}{% endif %}</div>

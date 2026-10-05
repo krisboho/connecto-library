@@ -110,6 +110,8 @@ def retry(tid: str, x_api_key: str | None = Header(default=None)):
 @app.get("/api/settings/{tab}")
 def settings_get(tab: str, x_api_key: str | None = Header(default=None)):
     _auth(x_api_key)
+    if tab == "download_sources":
+        return {"name": "download_sources", "fields": [{"key": "AA_DONATOR_KEY", "value": "", "type": "PasswordField"}]}
     if tab != "mirrors":
         raise HTTPException(404, {"error": "Unknown settings tab"})
     return {"name": "mirrors", "display_name": "Mirrors",

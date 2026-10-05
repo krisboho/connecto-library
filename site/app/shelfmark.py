@@ -60,6 +60,15 @@ class Shelfmark:
     async def put_settings_tab(self, tab: str, values: dict[str, Any]) -> dict[str, Any]:
         return await self._json("PUT", f"/api/settings/{tab}", json=values)
 
+    async def donator_key(self) -> str | None:
+        """Anna's Archive secret key as stored in Shelfmark. Never leaves the server."""
+        tab = await self.get_settings_tab("download_sources")
+        for f in tab.get("fields") or []:
+            if f.get("key") == "AA_DONATOR_KEY":
+                v = f.get("value")
+                return str(v).strip() if v else None
+        return None
+
     async def cover(self, path_and_query: str) -> httpx.Response:
         return await self._client.get(path_and_query, timeout=30.0)
 
